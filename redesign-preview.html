@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>资源管理器 · UI 重构方案</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root{
+    --bg: #12151C;
+    --panel: #1A1E28;
+    --panel-2: #1F2430;
+    --border: #2A2F3C;
+    --border-soft: #232836;
+    --text: #E7E9EE;
+    --text-dim: #8B92A5;
+    --text-faint: #5B6172;
+    --accent: #C9A15C;
+    --accent-soft: rgba(201,161,92,0.14);
+    --teal: #4FD1C5;
+    --teal-soft: rgba(79,209,197,0.14);
+    --red: #F87171;
+    --red-soft: rgba(248,113,113,0.12);
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size: 13.5px;
+    -webkit-font-smoothing: antialiased;
+    display:flex;
+    height:100vh;
+    overflow:hidden;
+  }
+
+  .mono{ font-family:'JetBrains Mono', monospace; }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar{
+    width: 216px;
+    background: linear-gradient(180deg, #14171F 0%, #10131A 100%);
+    border-right: 1px solid var(--border-soft);
+    display:flex;
+    flex-direction:column;
+    padding: 20px 12px;
+    flex-shrink:0;
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding: 4px 8px 22px 8px;
+  }
+  .brand-mark{
+    width:30px; height:30px;
+    border-radius:8px;
+    background: radial-gradient(circle at 30% 30%, #E3B96E, #B4823C 70%);
+    box-shadow: 0 0 0 1px rgba(201,161,92,0.35), 0 4px 10px rgba(201,161,92,0.15);
+  }
+  .brand-text{ display:flex; flex-direction:column; }
+  .brand-text b{ font-size:14px; font-weight:600; letter-spacing:0.2px; }
+  .brand-text span{ font-size:10.5px; color:var(--text-faint); letter-spacing:0.5px; }
+
+  .nav-group{ display:flex; flex-direction:column; gap:2px; margin-top:4px; }
+  .nav-item{
+    display:flex; align-items:center; gap:10px;
+    padding:9px 10px;
+    border-radius:7px;
+    color: var(--text-dim);
+    font-size:13px; font-weight:500;
+    cursor:pointer;
+    position:relative;
+    transition: background .15s ease, color .15s ease;
+  }
+  .nav-item svg{ width:16px; height:16px; opacity:.85; flex-shrink:0; }
+  .nav-item:hover{ background: var(--panel-2); color: var(--text); }
+  .nav-item.active{ background: var(--accent-soft); color: var(--accent); }
+  .nav-item.active::before{
+    content:'';
+    position:absolute; left:-12px; top:6px; bottom:6px; width:2.5px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+
+  .sidebar-footer{
+    margin-top:auto;
+    display:flex; flex-direction:column; gap:2px;
+    border-top:1px solid var(--border-soft);
+    padding-top: 12px;
+  }
+  .sidebar-footer .nav-item{ font-size:12px; color:var(--text-faint); padding:7px 10px; }
+  .sidebar-footer .nav-item svg{ width:14px; height:14px; }
+
+  /* ---------- Main ---------- */
+  .main{ flex:1; display:flex; flex-direction:column; min-width:0; }
+
+  .topbar{
+    height:56px;
+    border-bottom:1px solid var(--border-soft);
+    display:flex; align-items:center;
+    padding: 0 20px;
+    gap:14px;
+    flex-shrink:0;
+    background: rgba(255,255,255,0.01);
+  }
+
+  .capture-btn{
+    display:flex; align-items:center; gap:8px;
+    padding: 7px 14px 7px 10px;
+    border-radius: 999px;
+    background: var(--teal-soft);
+    border:1px solid rgba(79,209,197,0.35);
+    color: var(--teal);
+    font-weight:600; font-size:12.5px;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .capture-dot{
+    width:7px; height:7px; border-radius:50%;
+    background: var(--teal);
+    box-shadow: 0 0 0 0 rgba(79,209,197,0.5);
+    animation: pulse-dot 1.6s infinite;
+  }
+  @keyframes pulse-dot{
+    0%{ box-shadow: 0 0 0 0 rgba(79,209,197,0.45); }
+    70%{ box-shadow: 0 0 0 6px rgba(79,209,197,0); }
+    100%{ box-shadow: 0 0 0 0 rgba(79,209,197,0); }
+  }
+  .capture-btn.off{ background: var(--panel-2); border-color:var(--border); color:var(--text-faint); }
+  .capture-btn.off .capture-dot{ background: var(--text-faint); animation:none; }
+
+  .filter-tags{ display:flex; gap:6px; }
+  .tag{
+    padding:6px 12px;
+    border-radius:7px;
+    background: var(--panel-2);
+    border:1px solid var(--border);
+    color: var(--text-dim);
+    font-size:12px; font-weight:500;
+    cursor:pointer;
+    display:flex; align-items:center; gap:6px;
+  }
+  .tag.active{ background: var(--accent-soft); border-color: rgba(201,161,92,0.4); color: var(--accent); }
+  .tag .x{ opacity:.6; font-size:11px; }
+
+  .spacer{ flex:1; }
+
+  .icon-btn{
+    width:32px; height:32px;
+    border-radius:7px;
+    display:flex; align-items:center; justify-content:center;
+    background: transparent;
+    border:1px solid transparent;
+    color: var(--text-dim);
+    cursor:pointer;
+  }
+  .icon-btn:hover{ background: var(--panel-2); border-color:var(--border); color:var(--text); }
+  .icon-btn svg{ width:15px; height:15px; }
+
+  .btn-ghost{
+    display:flex; align-items:center; gap:6px;
+    padding: 7px 12px;
+    border-radius:7px;
+    background: var(--panel-2);
+    border:1px solid var(--border);
+    color: var(--text-dim);
+    font-size:12.5px; font-weight:500;
+    cursor:pointer;
+  }
+  .btn-ghost:hover{ color:var(--text); border-color:#3A4152; }
+  .btn-ghost svg{ width:13px; height:13px; }
+  .btn-ghost.danger{ color:#E5989B; }
+  .btn-ghost.danger svg{ color:var(--red); }
+
+  .btn-solid{
+    display:flex; align-items:center; gap:6px;
+    padding: 7px 14px;
+    border-radius:7px;
+    background: var(--accent);
+    color: #17140C;
+    font-size:12.5px; font-weight:600;
+    border:none;
+    cursor:pointer;
+  }
+  .btn-solid:hover{ filter:brightness(1.08); }
+  .btn-solid svg{ width:13px; height:13px; }
+
+  /* ---------- Pulse strip (signature element) ---------- */
+  .pulse-strip{
+    height:34px;
+    border-bottom:1px solid var(--border-soft);
+    background: linear-gradient(180deg, rgba(79,209,197,0.05), transparent);
+    display:flex; align-items:center;
+    padding: 0 20px;
+    gap:10px;
+    flex-shrink:0;
+  }
+  .pulse-strip .label{ font-size:11px; color:var(--text-faint); letter-spacing:0.3px; white-space:nowrap; }
+  .pulse-wave{ flex:1; height:20px; position:relative; overflow:hidden; }
+  .pulse-wave svg{ position:absolute; top:0; left:0; height:100%; width:200%; animation: wave-scroll 3.2s linear infinite; }
+  @keyframes wave-scroll{ from{ transform:translateX(0);} to{ transform:translateX(-50%);} }
+  .pulse-count{ font-size:11px; color:var(--teal); white-space:nowrap; }
+
+  /* ---------- Content area ---------- */
+  .content{ flex:1; overflow:auto; padding: 0; }
+
+  /* Table view */
+  .table-wrap{ padding: 0 20px 20px 20px; }
+  table{ width:100%; border-collapse:collapse; }
+  thead th{
+    text-align:left;
+    font-size:11.5px;
+    font-weight:600;
+    color: var(--text-faint);
+    letter-spacing:0.3px;
+    padding: 12px 10px;
+    border-bottom:1px solid var(--border-soft);
+    position:sticky; top:0; background:var(--bg);
+    white-space:nowrap;
+  }
+  tbody tr{ border-bottom:1px solid var(--border-soft); transition: background .12s ease; }
+  tbody tr:nth-child(odd){ background: rgba(255,255,255,0.012); }
+  tbody tr:hover{ background: var(--panel-2); }
+  tbody tr:hover .row-actions{ opacity:1; }
+  td{ padding: 11px 10px; vertical-align:middle; color: var(--text); }
+  td.dim{ color: var(--text-dim); }
+
+  .type-pill{
+    display:inline-flex; align-items:center; gap:5px;
+    padding:3px 8px;
+    border-radius:6px;
+    font-size:11px; font-weight:600;
+  }
+  .type-pill.video{ background: var(--teal-soft); color: var(--teal); }
+  .type-pill.image{ background: var(--accent-soft); color: var(--accent); }
+
+  .status{ display:flex; align-items:center; gap:6px; font-size:12px; }
+  .status .dot{ width:6px; height:6px; border-radius:50%; }
+  .status.ready .dot{ background: var(--teal); }
+  .status.wait .dot{ background: var(--text-faint); }
+  .status.err .dot{ background: var(--red); }
+
+  .thumb{
+    width:44px; height:26px;
+    border-radius:5px;
+    background: linear-gradient(135deg, #2A2F3C, #1D212B);
+    display:flex; align-items:center; justify-content:center;
+    color: var(--text-faint);
+    border:1px solid var(--border);
+  }
+  .thumb svg{ width:13px; height:13px; }
+
+  .path-cell{
+    font-size:11.5px;
+    color: var(--text-dim);
+    max-width:220px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+
+  .row-actions{ display:flex; gap:4px; opacity:0; transition:opacity .15s ease; }
+  .row-actions .icon-btn{ width:26px; height:26px; }
+  .row-actions .icon-btn svg{ width:13px; height:13px; }
+
+  /* Empty state */
+  .empty{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding: 90px 20px;
+    color: var(--text-faint);
+    gap:14px;
+  }
+  .empty-icon{
+    width:56px; height:56px;
+    border-radius:14px;
+    background: var(--panel-2);
+    border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center;
+    color: var(--text-faint);
+  }
+  .empty-icon svg{ width:24px; height:24px; }
+  .empty b{ color: var(--text-dim); font-size:13px; font-weight:600; }
+  .empty span{ font-size:12px; }
+
+  /* Settings view */
+  .settings-wrap{ max-width:660px; margin:0 auto; padding: 28px 20px 60px 20px; display:flex; flex-direction:column; gap:18px; }
+  .settings-tabs{ display:flex; gap:4px; padding: 0 20px; border-bottom:1px solid var(--border-soft); margin-top:4px; }
+  .settings-tab{
+    padding: 13px 4px; margin-right:20px;
+    font-size:13px; font-weight:600; color: var(--text-faint);
+    cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px;
+  }
+  .settings-tab.active{ color: var(--accent); border-bottom-color: var(--accent); }
+
+  .card{
+    background: var(--panel);
+    border:1px solid var(--border-soft);
+    border-radius:12px;
+    padding: 18px 20px;
+  }
+  .card-head{ display:flex; align-items:center; gap:8px; margin-bottom:14px; }
+  .card-head .bar{ width:3px; height:14px; background:var(--accent); border-radius:2px; }
+  .card-head b{ font-size:13px; font-weight:600; }
+
+  .field-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 11px 0;
+    border-bottom:1px solid var(--border-soft);
+    gap: 20px;
+  }
+  .field-row:last-child{ border-bottom:none; padding-bottom:0; }
+  .field-info{ display:flex; flex-direction:column; gap:2px; }
+  .field-info b{ font-size:12.5px; font-weight:500; color: var(--text); }
+  .field-info span{ font-size:11.5px; color: var(--text-faint); }
+
+  .field-control{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+
+  input[type=text], select{
+    background: var(--panel-2);
+    border:1px solid var(--border);
+    border-radius:7px;
+    color: var(--text);
+    padding: 7px 10px;
+    font-size:12.5px;
+    font-family: inherit;
+    outline:none;
+    min-width: 220px;
+  }
+  input[type=text]:focus, select:focus{ border-color: var(--accent); }
+  textarea{
+    background: var(--panel-2);
+    border:1px solid var(--border);
+    border-radius:8px;
+    color: var(--text-dim);
+    padding: 10px 12px;
+    font-size:11.5px;
+    font-family:'JetBrains Mono', monospace;
+    width:100%;
+    resize:vertical;
+    outline:none;
+    line-height:1.6;
+  }
+  textarea:focus{ border-color: var(--accent); }
+
+  .stepper{ display:flex; align-items:center; gap:0; border:1px solid var(--border); border-radius:7px; overflow:hidden; }
+  .stepper button{
+    width:26px; height:28px; background:var(--panel-2); border:none; color:var(--text-dim);
+    cursor:pointer; font-size:14px;
+  }
+  .stepper button:hover{ background:#262C3A; color:var(--text); }
+  .stepper .val{ width:36px; text-align:center; font-size:12.5px; font-family:'JetBrains Mono',monospace; background:var(--bg); height:28px; line-height:28px; }
+
+  .switch{ width:36px; height:20px; border-radius:999px; background: var(--panel-2); border:1px solid var(--border); position:relative; cursor:pointer; flex-shrink:0; }
+  .switch::after{ content:''; position:absolute; width:14px; height:14px; border-radius:50%; background: var(--text-faint); top:2px; left:2px; transition: all .18s ease; }
+  .switch.on{ background: var(--accent-soft); border-color: rgba(201,161,92,0.5); }
+  .switch.on::after{ background: var(--accent); left:18px; }
+
+  .btn-danger-outline{
+    padding:8px 14px; border-radius:7px; background:var(--red-soft); border:1px solid rgba(248,113,113,0.35);
+    color:#F3A3A3; font-size:12px; font-weight:600; cursor:pointer;
+  }
+
+  ::-webkit-scrollbar{ width:9px; height:9px; }
+  ::-webkit-scrollbar-thumb{ background: #2A2F3C; border-radius:5px; }
+  ::-webkit-scrollbar-track{ background: transparent; }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="brand">
+    <div class="brand-mark"></div>
+    <div class="brand-text"><b>橙引 Orangine</b><span>RESOURCE STUDIO</span></div>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-item active" onclick="showView('list')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+      获取资源
+    </div>
+    <div class="nav-item" onclick="showView('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 005 15a1.65 1.65 0 00-1.51-1H3.5a2 2 0 010-4h.09A1.65 1.65 0 005 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 5a1.65 1.65 0 001-1.51V3.5a2 2 0 014 0v.09A1.65 1.65 0 0015 5a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019 9c.13.36.36.68.66.93"/></svg>
+      系统设置
+    </div>
+  </div>
+
+  <div class="sidebar-footer">
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22"/></svg>github</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>关于我们</div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- ===================== 资源列表视图 ===================== -->
+  <div id="view-list">
+    <div class="topbar">
+      <div class="capture-btn" id="captureBtn" onclick="toggleCapture()">
+        <span class="capture-dot"></span>
+        <span id="captureLabel">正在抓取</span>
+      </div>
+      <div class="filter-tags">
+        <div class="tag active">视频 <span class="x">✕</span></div>
+        <div class="tag active">图片 <span class="x">✕</span></div>
+        <div class="tag">＋ 类型</div>
+      </div>
+      <div class="spacer"></div>
+      <div class="btn-ghost danger">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6"/></svg>
+        清空
+      </div>
+      <div class="btn-solid">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
+        批量下载
+      </div>
+      <div class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
+    </div>
+
+    <div class="pulse-strip">
+      <span class="label">抓取活动</span>
+      <div class="pulse-wave">
+        <svg viewBox="0 0 400 20" preserveAspectRatio="none">
+          <polyline points="0,10 10,10 15,4 20,16 25,10 40,10 45,7 50,13 55,10 80,10 85,2 90,18 95,10 130,10 135,6 140,14 145,10 200,10 205,10 210,4 215,16 220,10 235,10 240,7 245,13 250,10 280,10 285,2 290,18 295,10 330,10 335,6 340,14 345,10 400,10"
+            fill="none" stroke="#4FD1C5" stroke-width="1.4" opacity="0.7"/>
+          <polyline points="400,10 410,10 415,4 420,16 425,10 440,10 445,7 450,13 455,10 480,10 485,2 490,18 495,10 530,10 535,6 540,14 545,10 600,10 605,10 610,4 615,16 620,10 635,10 640,7 645,13 650,10 680,10 685,2 690,18 695,10 730,10 735,6 740,14 745,10 800,10"
+            fill="none" stroke="#4FD1C5" stroke-width="1.4" opacity="0.7"/>
+        </svg>
+      </div>
+      <span class="pulse-count">3 条流量 / 秒</span>
+    </div>
+
+    <div class="content">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:26px"><input type="checkbox"></th>
+              <th>预览</th>
+              <th>类型</th>
+              <th>域名</th>
+              <th>描述</th>
+              <th>大小</th>
+              <th>状态</th>
+              <th>保存路径</th>
+              <th style="width:90px">操作</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+
+        <div class="empty" id="emptyState" style="display:none">
+          <div class="empty-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 8v10a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2h4l2 3h8a2 2 0 012 2z"/><path d="M9 13l3 3 5-5" stroke="#F87171"/></svg>
+          </div>
+          <b>还没有捕获到资源</b>
+          <span>保持页面播放或加载，符合条件的视频与图片会自动出现在这里</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== 设置视图 ===================== -->
+  <div id="view-settings" style="display:none; flex-direction:column; height:100%;">
+    <div class="settings-tabs">
+      <div class="settings-tab active" onclick="showSettingsTab('basic')">基础设置</div>
+      <div class="settings-tab" onclick="showSettingsTab('advanced')">高级设置</div>
+    </div>
+
+    <div class="content">
+      <!-- 基础设置 -->
+      <div id="tab-basic" class="settings-wrap">
+        <div class="card">
+          <div class="card-head"><div class="bar"></div><b>存储</b></div>
+          <div class="field-row">
+            <div class="field-info"><b>保存目录</b><span>下载的资源将存放至该目录</span></div>
+            <div class="field-control">
+              <input type="text" class="mono" value="C:\Users\MyHome\Downloads" style="min-width:260px">
+              <div class="btn-ghost" style="padding:7px 12px;">选择</div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field-info"><b>文件命名</b><span>自动追加序号，避免重名覆盖</span></div>
+            <div class="field-control">
+              <div class="stepper"><button>－</button><div class="val">0</div><button>＋</button></div>
+              <div class="switch on"></div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field-info"><b>清晰度</b><span>抓取多码率资源时的优先选择</span></div>
+            <div class="field-control">
+              <select><option>默认（推荐）</option><option>最高画质</option><option>最小体积</option></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div class="bar"></div><b>抓取行为</b></div>
+          <div class="field-row">
+            <div class="field-info"><b>自动拦截</b><span>命中规则的资源自动加入列表</span></div>
+            <div class="field-control"><div class="switch on"></div></div>
+          </div>
+          <div class="field-row">
+            <div class="field-info"><b>全量拦截</b><span>不限制资源大小，拦截全部匹配项</span></div>
+            <div class="field-control"><div class="switch on"></div></div>
+          </div>
+          <div class="field-row">
+            <div class="field-info"><b>添加尾部</b><span>在文件名末尾追加时间戳标识</span></div>
+            <div class="field-control"><div class="switch on"></div></div>
+          </div>
+        </div>
+
+        <div class="card" style="display:flex; align-items:center; justify-content:space-between;">
+          <div class="field-info"><b>清理缓存</b><span>清除本地临时数据并重启应用</span></div>
+          <div class="btn-danger-outline">清理缓存并重启</div>
+        </div>
+      </div>
+
+      <!-- 高级设置 -->
+      <div id="tab-advanced" class="settings-wrap" style="display:none">
+        <div class="card">
+          <div class="card-head"><div class="bar"></div><b>网络</b></div>
+          <div class="field-row">
+            <div class="field-info"><b>下载代理</b><span>通过代理服务器发起下载请求</span></div>
+            <div class="field-control"><div class="switch"></div></div>
+          </div>
+          <div class="field-row">
+            <div class="field-info"><b>连接数</b><span>单个任务允许的最大并发连接</span></div>
+            <div class="field-control"><div class="stepper"><button>－</button><div class="val">16</div><button>＋</button></div></div>
+          </div>
+          <div class="field-row">
+            <div class="field-info"><b>下载数</b><span>同时进行的下载任务数量</span></div>
+            <div class="field-control"><div class="stepper"><button>－</button><div class="val">3</div><button>＋</button></div></div>
+          </div>
+          <div class="field-row">
+            <div class="field-info"><b>User-Agent</b><span>请求头中标识的浏览器身份</span></div>
+            <div class="field-control"><input type="text" class="mono" value="Mozilla/5.0 (Windows NT 10.0; Win64; x64)…" style="min-width:280px"></div>
+          </div>
+          <div class="field-row">
+            <div class="field-info"><b>Headers</b><span>自定义请求头，遵循 JSON 格式</span></div>
+            <div class="field-control"><input type="text" class="mono" value="default" style="min-width:280px"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div class="bar"></div><b>域名规则</b></div>
+          <textarea rows="2">*</textarea>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div class="bar"></div><b>拦截规则</b></div>
+          <textarea rows="8" class="mono">{
+  "application/dash+xml": {
+    "Type": "live",
+    "Suffix": ".mpd"
+  },
+  "application/msword": {
+    "Type": "doc",
+    "Suffix": ".doc"
+  },
+  "application/octet-stream": {
+    "Type": "stream",
+    "Suffix": "default"
+  }
+}</textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const rowsData = [
+    {type:'video', domain:'live.example.com', desc:'2024春季发布会主直播流', size:'128.4 MB', status:'ready', path:'C:/Downloads/live_0001.mp4'},
+    {type:'image', domain:'cdn.imgpool.cn', desc:'首页轮播 banner 图 (1920×640)', size:'214 KB', status:'ready', path:'C:/Downloads/banner_0002.jpg'},
+    {type:'video', domain:'stream.mediahub.io', desc:'产品演示分段流 · 第3段', size:'42.1 MB', status:'wait', path:'—'},
+    {type:'image', domain:'assets.brandcdn.com', desc:'品牌 Logo 矢量素材', size:'86 KB', status:'ready', path:'C:/Downloads/logo_0004.png'},
+    {type:'video', domain:'edge.videonet.net', desc:'M3U8 分片合并任务', size:'—', status:'err', path:'—'},
+    {type:'image', domain:'gallery.assetbase.com', desc:'相册封面图 · 未命名', size:'1.2 MB', status:'ready', path:'C:/Downloads/cover_0006.jpg'},
+  ];
+
+  const statusMap = {
+    ready: {cls:'ready', label:'可下载'},
+    wait: {cls:'wait', label:'解析中'},
+    err: {cls:'err', label:'已拦截'},
+  };
+
+  function renderRows(){
+    const tbody = document.getElementById('rows');
+    tbody.innerHTML = rowsData.map(r => {
+      const st = statusMap[r.status];
+      const pillClass = r.type === 'video' ? 'video' : 'image';
+      const pillLabel = r.type === 'video' ? '视频' : '图片';
+      return `<tr>
+        <td><input type="checkbox"></td>
+        <td><div class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3V9z" fill="currentColor" stroke="none"/></svg></div></td>
+        <td><span class="type-pill ${pillClass}">${pillLabel}</span></td>
+        <td class="dim">${r.domain}</td>
+        <td>${r.desc}</td>
+        <td class="dim mono">${r.size}</td>
+        <td><span class="status ${st.cls}"><span class="dot"></span>${st.label}</span></td>
+        <td class="path-cell mono">${r.path}</td>
+        <td>
+          <div class="row-actions">
+            <div class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg></div>
+            <div class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+  renderRows();
+
+  function showView(v){
+    document.getElementById('view-list').style.display = v === 'list' ? 'block' : 'none';
+    document.getElementById('view-settings').style.display = v === 'settings' ? 'flex' : 'none';
+    document.querySelectorAll('.sidebar .nav-group .nav-item').forEach((el,i) => {
+      el.classList.toggle('active', (v==='list' && i===0) || (v==='settings' && i===1));
+    });
+  }
+
+  function showSettingsTab(t){
+    document.getElementById('tab-basic').style.display = t === 'basic' ? 'flex' : 'none';
+    document.getElementById('tab-advanced').style.display = t === 'advanced' ? 'flex' : 'none';
+    document.querySelectorAll('.settings-tab').forEach((el,i) => {
+      el.classList.toggle('active', (t==='basic' && i===0) || (t==='advanced' && i===1));
+    });
+  }
+
+  let capturing = true;
+  function toggleCapture(){
+    capturing = !capturing;
+    const btn = document.getElementById('captureBtn');
+    const label = document.getElementById('captureLabel');
+    btn.classList.toggle('off', !capturing);
+    label.textContent = capturing ? '正在抓取' : '已关闭抓取';
+  }
+
+  document.querySelectorAll('.filter-tags .tag').forEach(tag => {
+    if(tag.textContent.includes('＋')) return;
+    tag.addEventListener('click', () => tag.classList.toggle('active'));
+  });
+
+  document.querySelectorAll('.switch').forEach(sw => {
+    sw.addEventListener('click', () => sw.classList.toggle('on'));
+  });
+</script>
+
+</body>
+</html>
