@@ -13,13 +13,70 @@
       <!-- Header -->
       <div class="flex items-center justify-between px-6 py-4 shrink-0 border-b border-slate-700/50" 
            style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%);">
-        <h4 class="text-white font-semibold text-[15px] flex items-center gap-2 m-0 truncate max-w-[80%]">
+        <h4 class="text-white font-semibold text-[15px] flex items-center gap-2 m-0 truncate max-w-[70%]">
           <svg class="w-5 h-5 text-blue-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14v-4z"></path><rect x="3" y="6" width="12" height="12" rx="2"></rect></svg>
           {{ t('index.preview') }} - <span class="text-slate-300 font-normal truncate">{{ previewRow?.Description || previewRow?.Url }}</span>
         </h4>
-        <button type="button" @click="changeShow(false)" class="text-slate-400 hover:text-white transition-colors bg-transparent border-none cursor-pointer outline-none p-1 shrink-0">
-          <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6L18 18M6 18L18 6" /></svg>
-        </button>
+        <div class="flex items-center gap-3 shrink-0">
+          <!-- Done / Downloaded -->
+          <button 
+            v-if="previewRow?.Status === 'done'"
+            type="button" 
+            @click="handleOpenFolder" 
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-emerald-300 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 transition-all shadow cursor-pointer outline-none"
+            :title="previewRow?.SavePath ? t('index.open_folder') : t('index.done')"
+          >
+            <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <span>{{ t('index.done') }}</span>
+          </button>
+
+          <!-- Downloading / Running -->
+          <button 
+            v-else-if="previewRow?.Status === 'running'"
+            type="button" 
+            disabled
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-amber-300 bg-amber-500/20 border border-amber-500/30 transition-all shadow cursor-not-allowed outline-none"
+          >
+            <svg class="w-3.5 h-3.5 animate-spin text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" stroke-opacity="0.25" stroke="currentColor"></circle>
+              <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"></path>
+            </svg>
+            <span>{{ t('index.running') }}...</span>
+          </button>
+
+          <!-- Pending in queue -->
+          <button 
+            v-else-if="previewRow?.Status === 'pending'"
+            type="button" 
+            disabled
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sky-300 bg-sky-500/20 border border-sky-500/30 transition-all shadow cursor-not-allowed outline-none"
+          >
+            <span>{{ t('index.pending') }}...</span>
+          </button>
+
+          <!-- Direct Download (Default / Ready) -->
+          <button 
+            v-else-if="previewRow?.Classify !== 'live' && previewRow?.Classify !== 'm3u8'"
+            type="button" 
+            @click="handleDownload" 
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-all shadow cursor-pointer border-none outline-none"
+            :title="t('index.direct_download')"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>{{ t('index.direct_download') }}</span>
+          </button>
+
+          <!-- Close button -->
+          <button type="button" @click="changeShow(false)" class="text-slate-400 hover:text-white transition-colors bg-transparent border-none cursor-pointer outline-none p-1 shrink-0">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6L18 18M6 18L18 6" /></svg>
+          </button>
+        </div>
       </div>
       
       <!-- Body -->
@@ -45,6 +102,7 @@ import axios from "axios"
 import { getDecryptionArray } from '@/assets/js/decrypt.js'
 import type Player from "video.js/dist/types/player"
 import {useI18n} from 'vue-i18n'
+import appApi from "@/api/app"
 
 const {t} = useI18n()
 const videoPlayer = ref<HTMLElement | any>(null)
@@ -64,9 +122,19 @@ const props = defineProps<{
   showModal: boolean
   previewRow: any
 }>()
-const emits = defineEmits(["update:showModal"])
+const emits = defineEmits(["update:showModal", "download"])
 
 const changeShow = (value: boolean) => emits("update:showModal", value)
+
+const handleDownload = () => {
+  emits("download", props.previewRow)
+}
+
+const handleOpenFolder = () => {
+  if (props.previewRow?.SavePath) {
+    appApi.openFolder({filePath: props.previewRow.SavePath})
+  }
+}
 
 const onAfterEnter = () => {
   if (props.previewRow.DecodeKey) {

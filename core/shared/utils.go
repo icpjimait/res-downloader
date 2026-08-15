@@ -141,10 +141,25 @@ func OpenFolder(filePath string) error {
 		cmd = exec.Command("open", "-R", filePath)
 	case "windows":
 		absPath, _ := filepath.Abs(filePath)
-		// Just open the directory containing the file
-		cmd = exec.Command("explorer", filepath.FromSlash(filepath.Dir(absPath)))
+		absPath = filepath.FromSlash(absPath)
+		if fi, err := os.Stat(absPath); err == nil && !fi.IsDir() {
+			// Windows explorer /select,<file> opens folder and selects the file
+			cmd = exec.Command("explorer", "/select,", absPath)
+		} else {
+			dir := absPath
+			if fi != nil && !fi.IsDir() {
+				dir = filepath.Dir(absPath)
+			} else if _, err := os.Stat(absPath); err != nil {
+				dir = filepath.Dir(absPath)
+			}
+			cmd = exec.Command("explorer", dir)
+		}
 	case "linux":
-		cmd = exec.Command("nautilus", filePath)
+		if fi, err := os.Stat(filePath); err == nil && !fi.IsDir() {
+			cmd = exec.Command("nautilus", "--select", filePath)
+		} else {
+			cmd = exec.Command("nautilus", filePath)
+		}
 		if err := cmd.Start(); err != nil {
 			cmd = exec.Command("thunar", filePath)
 			if err := cmd.Start(); err != nil {

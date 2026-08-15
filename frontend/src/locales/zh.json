@@ -76,6 +76,7 @@
     "copy_data": "复制数据",
     "open_link": "打开链接",
     "open_file": "打开文件",
+    "open_folder": "打开目录并定位文件",
     "delete_row": "删除记录",
     "delete_tip": "运行中任务无法删除",
     "cancel_down": "取消下载",

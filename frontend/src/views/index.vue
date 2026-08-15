@@ -104,7 +104,7 @@
       <a @click="BrowserOpenURL('https://github.com/putyy/res-downloader/releases')">{{ t('footer.update_log') }}</a>
     </div>
 
-    <Preview v-model:showModal="showPreviewRow" :previewRow="previewRow"/>
+    <Preview v-model:showModal="showPreviewRow" :previewRow="previewRow" @download="handlePreviewDownload"/>
     <ShowLoading :loadingText="loadingText" :isLoading="loading"/>
     <ImportJson v-model:showModal="showImport" @submit="handleImport"/>
     <Password v-model:showModal="showPassword" @submit="handlePassword"/>
@@ -311,6 +311,10 @@ const columns = ref<any[]>([
         return h('div', {
           style: 'cursor: pointer; display: flex; align-items: center; gap: 4px; color: var(--teal); font-size: 12px;',
           onClick: () => {
+            if (row.UrlSign && downloadHistory.value[row.UrlSign]) {
+              row.Status = "done"
+              row.SavePath = downloadHistory.value[row.UrlSign]
+            }
             previewRow.value = row
             showPreviewRow.value = true
           }
@@ -639,6 +643,9 @@ watch(() => {
 const updateItem = (id: string, updater: (item: any) => void) => {
   const item = data.value.find(i => i.Id === id)
   if (item) updater(item)
+  if (previewRow.value && previewRow.value.Id === id) {
+    updater(previewRow.value)
+  }
 }
 
 function cacheData() {
@@ -857,6 +864,19 @@ const batchExport = (type?: string) => {
 
 const uint8ArrayToBase64 = (bytes: any) => {
   return window.btoa(Array.from(bytes, (byte: any) => String.fromCharCode(byte)).join(''))
+}
+
+const handlePreviewDownload = (row: appType.MediaInfo) => {
+  if (row.Classify === 'live' || row.Classify === 'm3u8') {
+    window?.$message?.error(t("index.download_no_tip"))
+    return
+  }
+  const index = data.value.findIndex(item => item.Id === row.Id)
+  if (index !== -1) {
+    download(data.value[index], index)
+  } else {
+    download(row, 0)
+  }
 }
 
 const download = (row: appType.MediaInfo, index: number) => {

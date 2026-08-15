@@ -76,6 +76,7 @@
     "copy_data": "Copy Data",
     "open_link": "Open Link",
     "open_file": "Open File",
+    "open_folder": "Show in Folder",
     "delete_row": "Delete Row",
     "delete_tip": "Running tasks cannot be deleted",
     "cancel_down": "Cancel Download",
