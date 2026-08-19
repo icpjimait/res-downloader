@@ -1,6 +1,6 @@
 <div align="center">
 
-<a href="https://github.com/icpjimait/res-downloader"><img src="images/logo.png" width="120"/></a>
+<a href="https://github.com/icpjimait/res-downloader"><img src="docs/images/logo.png" width="120"/></a>
 <h1>res-downloader</h1>
 <p>基于 Go + Wails + Vue 3 的高性能、现代化跨平台网络资源嗅探与下载神器</p>
 
@@ -82,7 +82,7 @@ wails build -platform darwin/universal
 
 ## 🤝 参与贡献与致谢
 
-欢迎提交 Issue 和 Pull Request！提交 PR 前请阅读 [CONTRIBUTING.md](../CONTRIBUTING.md)。
+欢迎提交 Issue 和 Pull Request！提交 PR 前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 * 本项目基于开源社区优秀项目二次开发与增强，感谢所有原作者与贡献者的辛勤付出。
 
