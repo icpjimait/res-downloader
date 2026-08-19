@@ -257,6 +257,23 @@ const pulseCount = ref(0)
 let pulseBuffer = 0
 let pulseTimer: ReturnType<typeof setInterval> | null = null
 
+const popularTags = computed(() => {
+  const tagCounts: { [tag: string]: number } = {}
+  data.value.forEach(item => {
+    if (!item.Description) return
+    const matches = item.Description.match(/#[^\s#，。！？、,!?]+/g)
+    if (matches) {
+      matches.forEach((tag: string) => {
+        tagCounts[tag] = (tagCounts[tag] || 0) + 1
+      })
+    }
+  })
+  return Object.entries(tagCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([tag, count]) => ({ tag, count }))
+})
+
 // ── Table columns (render functions use dark theme classes) ──
 const columns = ref<any[]>([
   {
@@ -355,10 +372,73 @@ const columns = ref<any[]>([
     }
   },
   {
-    title: computed(() => t("index.description")),
+    title: () => {
+      const isFiltered = !!descriptionSearchValue.value
+      return h('div', {
+        style: 'display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 6px;'
+      }, [
+        h('div', { style: 'display: flex; align-items: center; gap: 4px; overflow: hidden;' }, [
+          h('span', isFiltered ? { style: 'color: var(--accent); font-weight: 600;' } : {}, t("index.description")),
+          isFiltered ? h('span', {
+            style: 'background: rgba(245, 158, 11, 0.18); color: var(--accent); font-size: 10.5px; padding: 1px 6px; border-radius: 4px; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'
+          }, descriptionSearchValue.value) : null
+        ]),
+        h(NPopover, {
+          trigger: 'click',
+          placement: 'bottom-end',
+          style: 'padding: 12px; background: var(--panel); border: 1px solid var(--border-soft); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); width: 280px;'
+        }, {
+          trigger: () => h('div', {
+            class: 'icon-btn',
+            style: isFiltered
+              ? 'width: 22px; height: 22px; color: var(--accent); background: rgba(245, 158, 11, 0.15); border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center;'
+              : 'width: 22px; height: 22px; color: var(--text-dim); cursor: pointer; display: flex; align-items: center; justify-content: center;',
+            title: '筛选描述 / 标签'
+          }, [
+            h('svg', {
+              viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2',
+              style: 'width: 13px; height: 13px;'
+            }, [
+              h('polygon', { points: '22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3' })
+            ])
+          ]),
+          default: () => h('div', { class: 'flex flex-col gap-3', style: '--wails-draggable:no-drag;' }, [
+            h('div', { class: 'flex items-center justify-between' }, [
+              h('span', { style: 'font-weight: 600; font-size: 13px; color: var(--text);' }, '筛选描述 / 标签'),
+              isFiltered ? h('button', {
+                class: 'text-xs hover:underline',
+                style: 'color: var(--accent); background: none; border: none; cursor: pointer;',
+                onClick: () => { descriptionSearchValue.value = '' }
+              }, '清空筛选') : null
+            ]),
+            h(NInput, {
+              value: descriptionSearchValue.value,
+              placeholder: '输入关键词或标签 (如 #二次元)...',
+              size: 'small',
+              clearable: true,
+              'onUpdate:value': (val: string) => { descriptionSearchValue.value = val }
+            }),
+            popularTags.value.length > 0 ? h('div', { class: 'flex flex-col gap-1.5' }, [
+              h('span', { style: 'font-size: 11px; color: var(--text-faint);' }, '快捷标签:'),
+              h('div', { class: 'flex flex-wrap gap-1.5', style: 'max-height: 130px; overflow-y: auto;' },
+                popularTags.value.map(({tag, count}) => h('span', {
+                  class: 'tag-chip',
+                  style: descriptionSearchValue.value === tag
+                    ? 'background: var(--accent); color: #fff; font-size: 11px; padding: 2px 7px; border-radius: 4px; cursor: pointer;'
+                    : 'background: var(--panel-2); color: var(--text-dim); border: 1px solid var(--border); font-size: 11px; padding: 2px 7px; border-radius: 4px; cursor: pointer;',
+                  onClick: () => {
+                    descriptionSearchValue.value = (descriptionSearchValue.value === tag) ? '' : tag
+                  }
+                }, `${tag} (${count})`))
+              )
+            ]) : null
+          ])
+        })
+      ])
+    },
     key: "Description",
-    width: 180,
-    minWidth: 100,
+    width: 220,
+    minWidth: 120,
     maxWidth: 800,
     resizable: true,
     render: (row: appType.MediaInfo) => {
@@ -680,7 +760,8 @@ const resetTableHeight = () => {
     const bottomHeight = document.getElementById("bottom")?.offsetHeight || 0
     const pulseHeight = isProxy.value ? 34 : 0
     const height = document.documentElement.clientHeight || window.innerHeight
-    tableHeight.value = height - headerHeight - bottomHeight - pulseHeight - 42 - 10
+    // 增加底部安全边距缓冲（24px），确保最后一行完全展现，绝不被底栏遮挡
+    tableHeight.value = Math.max(150, height - headerHeight - bottomHeight - pulseHeight - 42 - 24)
   } catch (e) {
     console.log(e)
   }

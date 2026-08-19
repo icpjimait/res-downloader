@@ -596,6 +596,11 @@
   align-items: center;
   gap: 4px;
   padding: 6px 0;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 5;
 }
 .footer-links a {
   color: var(--text-faint);
@@ -606,3 +611,12 @@
   text-decoration: none;
 }
 .footer-links a:hover { color: var(--accent); }
+
+.tag-chip {
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.tag-chip:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}

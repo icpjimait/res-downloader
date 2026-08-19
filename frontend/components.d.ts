@@ -33,7 +33,6 @@ declare module 'vue' {
     NPopover: typeof import('naive-ui')['NPopover']
     NSelect: typeof import('naive-ui')['NSelect']
     NSwitch: typeof import('naive-ui')['NSwitch']
-    NTooltip: typeof import('naive-ui')['NTooltip']
     Password: typeof import('./src/components/Password.vue')['default']
     Preview: typeof import('./src/components/Preview.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
