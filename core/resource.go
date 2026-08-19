@@ -128,8 +128,23 @@ func (r *Resource) download(mediaInfo shared.MediaInfo, decodeStr string) {
 			mediaInfo.SavePath = filepath.Join(globalConfig.SaveDirectory, fileName)
 		}
 
-		if !strings.HasSuffix(mediaInfo.SavePath, mediaInfo.Suffix) {
-			mediaInfo.SavePath = mediaInfo.SavePath + mediaInfo.Suffix
+		suffix := mediaInfo.Suffix
+		if suffix == "" || suffix == "default" || suffix == ".default" {
+			if mediaInfo.Classify == "video" || strings.Contains(rawUrl, "douyin") || strings.Contains(rawUrl, "tos") {
+				suffix = ".mp4"
+			} else if mediaInfo.Classify == "audio" {
+				suffix = ".mp3"
+			} else if mediaInfo.Classify == "image" {
+				suffix = ".png"
+			}
+		}
+		if suffix != "" && !strings.HasPrefix(suffix, ".") {
+			suffix = "." + suffix
+		}
+		mediaInfo.Suffix = suffix
+
+		if suffix != "" && !strings.HasSuffix(strings.ToLower(mediaInfo.SavePath), strings.ToLower(suffix)) {
+			mediaInfo.SavePath = mediaInfo.SavePath + suffix
 		}
 
 		if strings.Contains(rawUrl, "qq.com") {

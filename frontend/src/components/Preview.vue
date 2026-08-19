@@ -186,9 +186,14 @@ const setupVideoJsPlayer = () => {
     })
   }
 
+  let mediaType = props.previewRow.ContentType || "video/mp4"
+  if (mediaType === "application/octet-stream" || mediaType === "video/tos" || mediaType === "binary/octet-stream" || props.previewRow.Classify === "video") {
+    mediaType = "video/mp4"
+  }
+
   player.src({
     src: window?.$baseUrl + "/api/preview?url=" + encodeURIComponent(props.previewRow.Url),
-    type: props.previewRow.ContentType,
+    type: mediaType,
     withCredentials: true,
   })
   player.play()

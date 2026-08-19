@@ -32,35 +32,92 @@ func (p *DefaultPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *
 		return resp
 	}
 
-	classify, suffix := p.bridge.TypeSuffix(resp.Header.Get("Content-Type"))
+	contentType := resp.Header.Get("Content-Type")
+	classify, suffix := p.bridge.TypeSuffix(contentType)
+
+	rawUrl := resp.Request.URL.String()
+	lowerUrl := strings.ToLower(rawUrl)
+	host := strings.ToLower(resp.Request.Host)
+
+	// 特别针对抖音 / 字节跳动 / 西瓜视频及常见流媒体 CDN 进行智能特征识别与纠偏
+	isByteDance := strings.Contains(host, "douyinvod.com") ||
+		strings.Contains(host, "douyin.com") ||
+		strings.Contains(host, "snssdk.com") ||
+		strings.Contains(host, "amemv.com") ||
+		strings.Contains(host, "bytegoofy.com") ||
+		strings.Contains(host, "zijieapi.com") ||
+		strings.Contains(host, "ixigua.com") ||
+		strings.Contains(host, "huoshan.com") ||
+		strings.Contains(lowerUrl, "/video/tos/") ||
+		strings.Contains(lowerUrl, "/tos-cn-") ||
+		strings.Contains(lowerUrl, "aweme/v1/play")
+
+	if isByteDance {
+		if classify == "" || classify == "stream" {
+			classify = "video"
+			suffix = ".mp4"
+			contentType = "video/mp4"
+		}
+	} else if classify == "" || classify == "stream" {
+		// URL 路径含有常规音视频后缀但 Header 为 application/octet-stream 的智能识别
+		cleanPath := strings.Split(strings.Split(lowerUrl, "?")[0], "#")[0]
+		if strings.HasSuffix(cleanPath, ".mp4") || strings.Contains(cleanPath, ".mp4") {
+			classify = "video"
+			suffix = ".mp4"
+			contentType = "video/mp4"
+		} else if strings.HasSuffix(cleanPath, ".flv") {
+			classify = "live"
+			suffix = ".flv"
+		} else if strings.HasSuffix(cleanPath, ".m3u8") {
+			classify = "m3u8"
+			suffix = ".m3u8"
+		} else if strings.HasSuffix(cleanPath, ".mp3") || strings.HasSuffix(cleanPath, ".m4a") {
+			classify = "audio"
+			suffix = ".mp3"
+		}
+	}
+
 	if classify == "" {
 		return resp
 	}
 
-	rawUrl := resp.Request.URL.String()
 	isAll, _ := p.bridge.GetResType("all")
 	isClassify, _ := p.bridge.GetResType(classify)
 
-	if suffix == "default" {
+	if suffix == "default" || suffix == "" {
 		ext := filepath.Ext(filepath.Base(strings.Split(strings.Split(rawUrl, "?")[0], "#")[0]))
 		if ext != "" {
 			suffix = ext
+		} else if classify == "video" {
+			suffix = ".mp4"
 		}
 	}
 
 	urlSign := shared.Md5(rawUrl)
 	if ok := p.bridge.MediaIsMarked(urlSign); !ok && (isAll || isClassify) {
-		value, _ := strconv.ParseFloat(resp.Header.Get("content-length"), 64)
+		var value float64
+		// 优先从 Content-Range（如 bytes 0-32767/15482931）中获取真实文件总大小
+		if contentRange := resp.Header.Get("Content-Range"); contentRange != "" {
+			parts := strings.Split(contentRange, "/")
+			if len(parts) == 2 && parts[1] != "*" {
+				if totalSize, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64); err == nil && totalSize > 0 {
+					value = totalSize
+				}
+			}
+		}
+		if value == 0 {
+			value, _ = strconv.ParseFloat(resp.Header.Get("content-length"), 64)
+		}
 
 		if classify == "image" {
 			if minSize, ok := p.bridge.GetConfig("MinImageSize").(int); ok && minSize > 0 {
-				if value < float64(minSize*1024) {
+				if value > 0 && value < float64(minSize*1024) {
 					return resp
 				}
 			}
 		} else if classify == "video" || classify == "live" || classify == "m3u8" {
 			if minSize, ok := p.bridge.GetConfig("MinVideoSize").(int); ok && minSize > 0 {
-				if value < float64(minSize*1024) {
+				if value > 0 && value < float64(minSize*1024) {
 					return resp
 				}
 			}
@@ -83,11 +140,19 @@ func (p *DefaultPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *
 			DecodeKey:   "",
 			OtherData:   map[string]string{},
 			Description: "",
-			ContentType: resp.Header.Get("Content-Type"),
+			ContentType: contentType,
 		}
 
 		// Store entire request headers as JSON
-		if headers, err := json.Marshal(resp.Request.Header); err == nil {
+		reqHeaders := make(http.Header)
+		for k, v := range resp.Request.Header {
+			reqHeaders[k] = v
+		}
+		if isByteDance && reqHeaders.Get("Referer") == "" {
+			reqHeaders.Set("Referer", "https://www.douyin.com/")
+		}
+
+		if headers, err := json.Marshal(reqHeaders); err == nil {
 			res.OtherData["headers"] = string(headers)
 		}
 

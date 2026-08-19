@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"res-downloader/core/shared"
 	"strings"
+	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -80,19 +82,62 @@ func (h *HttpServer) preview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 1. 设置真实有效的 User-Agent
+	ua := globalConfig.UserAgent
+	if ua == "" {
+		ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
+	}
+	request.Header.Set("User-Agent", ua)
+
+	// 2. 根据域名智能设置 Referer 与防盗链头
+	host := strings.ToLower(parsedURL.Host)
+	if strings.Contains(host, "douyinvod.com") || strings.Contains(host, "douyin.com") ||
+		strings.Contains(host, "snssdk.com") || strings.Contains(host, "amemv.com") ||
+		strings.Contains(host, "bytegoofy.com") || strings.Contains(host, "ixigua.com") {
+		request.Header.Set("Referer", "https://www.douyin.com/")
+	} else if strings.Contains(host, "kuaishou.com") || strings.Contains(host, "yximgs.com") || strings.Contains(host, "kwimgs.com") {
+		request.Header.Set("Referer", "https://www.kuaishou.com/")
+	} else if strings.Contains(host, "xiaohongshu.com") || strings.Contains(host, "xhscdn.com") {
+		request.Header.Set("Referer", "https://www.xiaohongshu.com/")
+	} else if strings.Contains(host, "bilibili.com") || strings.Contains(host, "bilivideo.com") || strings.Contains(host, "hdslb.com") {
+		request.Header.Set("Referer", "https://www.bilibili.com/")
+	} else if parsedURL.Scheme != "" && parsedURL.Host != "" {
+		request.Header.Set("Referer", parsedURL.Scheme+"://"+parsedURL.Host+"/")
+	}
+
+	// 3. 支持前端音视频播放器 Range 请求分段播放
 	if rangeHeader := r.Header.Get("Range"); rangeHeader != "" {
 		request.Header.Set("Range", rangeHeader)
 	}
 
-	resp, err := http.DefaultClient.Do(request)
+	transport := &http.Transport{
+		DisableKeepAlives: false,
+		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+	}
+	if globalConfig.DownloadProxy && globalConfig.UpstreamProxy != "" && !strings.Contains(globalConfig.UpstreamProxy, globalConfig.Port) {
+		if proxyURL, err := url.Parse(globalConfig.UpstreamProxy); err == nil {
+			transport.Proxy = http.ProxyURL(proxyURL)
+		}
+	}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   60 * time.Second,
+	}
+
+	resp, err := client.Do(request)
 	if err != nil {
 		http.Error(w, "Failed to fetch the resource", http.StatusInternalServerError)
 		return
 	}
 	defer resp.Body.Close()
 
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Range, Origin, Content-Type, Accept")
+	w.Header().Set("Access-Control-Expose-Headers", "Content-Range, Content-Length, Accept-Ranges")
+
 	for k, v := range resp.Header {
-		if strings.ToLower(k) == "access-control-allow-origin" {
+		lk := strings.ToLower(k)
+		if lk == "access-control-allow-origin" || lk == "access-control-allow-headers" {
 			continue
 		}
 		for _, vv := range v {
@@ -103,7 +148,7 @@ func (h *HttpServer) preview(w http.ResponseWriter, r *http.Request) {
 
 	_, err = io.Copy(w, resp.Body)
 	if err != nil {
-		http.Error(w, "Failed to serve the resource", http.StatusInternalServerError)
+		globalLogger.Warn().Msgf("preview stream write error: %v", err)
 	}
 	return
 }

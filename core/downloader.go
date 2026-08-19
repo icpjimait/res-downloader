@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"res-downloader/core/shared"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -128,8 +129,32 @@ func (fd *FileDownloader) init() error {
 	if err != nil {
 		return fmt.Errorf("parse URL failed: %w", err)
 	}
-	if parsedURL.Scheme != "" && parsedURL.Host != "" {
+
+	host := strings.ToLower(parsedURL.Host)
+	isByteDance := strings.Contains(host, "douyinvod.com") ||
+		strings.Contains(host, "douyin.com") ||
+		strings.Contains(host, "snssdk.com") ||
+		strings.Contains(host, "amemv.com") ||
+		strings.Contains(host, "bytegoofy.com") ||
+		strings.Contains(host, "ixigua.com")
+
+	if isByteDance {
+		fd.Referer = "https://www.douyin.com/"
+	} else if strings.Contains(host, "kuaishou.com") || strings.Contains(host, "yximgs.com") || strings.Contains(host, "kwimgs.com") {
+		fd.Referer = "https://www.kuaishou.com/"
+	} else if strings.Contains(host, "xiaohongshu.com") || strings.Contains(host, "xhscdn.com") {
+		fd.Referer = "https://www.xiaohongshu.com/"
+	} else if strings.Contains(host, "bilibili.com") || strings.Contains(host, "bilivideo.com") || strings.Contains(host, "hdslb.com") {
+		fd.Referer = "https://www.bilibili.com/"
+	} else if parsedURL.Scheme != "" && parsedURL.Host != "" {
 		fd.Referer = parsedURL.Scheme + "://" + parsedURL.Host + "/"
+	}
+
+	if _, ok := fd.Headers["Referer"]; !ok {
+		fd.Headers["Referer"] = fd.Referer
+	}
+	if _, ok := fd.Headers["User-Agent"]; !ok {
+		fd.Headers["User-Agent"] = globalConfig.UserAgent
 	}
 
 	if globalConfig.DownloadProxy && globalConfig.UpstreamProxy != "" && !strings.Contains(globalConfig.UpstreamProxy, globalConfig.Port) {
@@ -139,40 +164,64 @@ func (fd *FileDownloader) init() error {
 		}
 	}
 
+	// 优先尝试 HEAD 请求
+	headSuccess := false
 	request, err := http.NewRequest("HEAD", fd.Url, nil)
-	if err != nil {
-		return fmt.Errorf("create HEAD request failed: %w", err)
-	}
-
-	if _, ok := fd.Headers["User-Agent"]; !ok {
-		fd.Headers["User-Agent"] = globalConfig.UserAgent
-	}
-
-	fd.setHeaders(request)
-
-	var resp *http.Response
-	for retries := 0; retries < MaxRetries; retries++ {
-		resp, err = fd.buildClient().Do(request)
-		if err == nil {
-			break
+	if err == nil {
+		fd.setHeaders(request)
+		for retries := 0; retries < MaxRetries; retries++ {
+			resp, reqErr := fd.buildClient().Do(request)
+			if reqErr == nil {
+				if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent {
+					fd.TotalSize = resp.ContentLength
+					if resp.Header.Get("Accept-Ranges") == "bytes" && fd.TotalSize > MinPartSize {
+						fd.IsMultiPart = true
+					}
+					headSuccess = true
+					resp.Body.Close()
+					break
+				}
+				resp.Body.Close()
+			}
+			if retries < MaxRetries-1 {
+				time.Sleep(RetryDelay)
+			}
 		}
-		if retries < MaxRetries-1 {
-			time.Sleep(RetryDelay)
-			globalLogger.Warn().Msgf("HEAD request failed, retrying (%d/%d): %v", retries+1, MaxRetries, err)
+	}
+
+	// 如果 HEAD 请求被 CDN 拒绝或未返回大小，使用 GET Range: bytes=0-0 优雅探测
+	if !headSuccess || fd.TotalSize <= 0 {
+		rangeReq, reqErr := http.NewRequest("GET", fd.Url, nil)
+		if reqErr == nil {
+			fd.setHeaders(rangeReq)
+			rangeReq.Header.Set("Range", "bytes=0-0")
+			if rangeResp, doErr := fd.buildClient().Do(rangeReq); doErr == nil {
+				defer rangeResp.Body.Close()
+				if rangeResp.StatusCode == http.StatusPartialContent {
+					fd.IsMultiPart = true
+					if cr := rangeResp.Header.Get("Content-Range"); cr != "" {
+						parts := strings.Split(cr, "/")
+						if len(parts) == 2 && parts[1] != "*" {
+							if total, parseErr := strconv.ParseInt(strings.TrimSpace(parts[1]), 10, 64); parseErr == nil && total > 0 {
+								fd.TotalSize = total
+							}
+						}
+					}
+				} else if rangeResp.StatusCode == http.StatusOK {
+					fd.TotalSize = rangeResp.ContentLength
+				}
+			}
 		}
 	}
 
-	if err != nil {
-		return fmt.Errorf("HEAD request failed after %d retries: %w", MaxRetries, err)
-	}
-	defer resp.Body.Close()
-
-	fd.TotalSize = resp.ContentLength
 	if fd.TotalSize <= 0 {
 		fd.IsMultiPart = false
 		fd.TotalSize = -1
-	} else if resp.Header.Get("Accept-Ranges") == "bytes" && fd.TotalSize > MinPartSize {
-		fd.IsMultiPart = true
+	}
+
+	// 对反爬严格的视频 CDN 适当调小分片并发数，防止触发风控或连接重置
+	if isByteDance && fd.totalTasks > 4 {
+		fd.totalTasks = 4
 	}
 
 	dir := filepath.Dir(fd.FileName)
