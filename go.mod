@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/elazarl/goproxy v1.7.2
+	github.com/energye/systray v1.0.3
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/rs/zerolog v1.33.0
 	github.com/vrischmann/userdir v0.0.0-20151206171402-20f291cebd68

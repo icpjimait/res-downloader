@@ -43,14 +43,14 @@
 
 <script lang="ts" setup>
 import {ref} from "vue"
-import {Quit, WindowFullscreen, WindowMinimise, WindowUnfullscreen} from "../../wailsjs/runtime"
+import {WindowHide, WindowFullscreen, WindowMinimise, WindowUnfullscreen} from "../../wailsjs/runtime"
 import {useI18n} from 'vue-i18n'
 
 const {t} = useI18n()
 const isMaximized = ref(false)
 
 const closeWindow = () => {
-  Quit()
+  WindowHide()
 }
 const minimizeWindow = () => {
   WindowMinimise()

@@ -8,7 +8,8 @@
     "submit": "Submit",
     "delete": "Delete",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "already_running": "The program is already running, main window restored."
   },
   "components": {
     "password_title": "Admin Authorization",

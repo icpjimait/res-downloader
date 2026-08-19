@@ -168,7 +168,7 @@ import Action from "@/components/Action.vue"
 import ActionDesc from "@/components/ActionDesc.vue"
 import ImportJson from "@/components/ImportJson.vue"
 import {useEventStore} from "@/stores/event"
-import {BrowserOpenURL, ClipboardSetText} from "../../wailsjs/runtime"
+import {BrowserOpenURL, ClipboardSetText, EventsOn} from "../../wailsjs/runtime"
 import Password from "@/components/Password.vue"
 import ShowOrEdit from "@/components/ShowOrEdit.vue"
 import {useI18n} from 'vue-i18n'
@@ -480,6 +480,10 @@ const toggleType = (type: string) => {
 }
 
 onMounted(() => {
+  EventsOn("second-instance-launched", () => {
+    window?.$message?.info(t("common.already_running"), {duration: 4000})
+  })
+
   const historyStr = localStorage.getItem("downloadHistory")
   if (historyStr) {
     try { downloadHistory.value = JSON.parse(historyStr) } catch (e) {}

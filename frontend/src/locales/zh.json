@@ -8,7 +8,8 @@
     "submit": "提交",
     "delete": "删除",
     "yes": "是",
-    "no": "否"
+    "no": "否",
+    "already_running": "程序已在运行中，已为您唤起主窗口"
   },
   "components": {
     "password_title": "管理员授权",
