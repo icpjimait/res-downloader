@@ -1,21 +1,38 @@
 ## 下载安装文件
-- windows下载.exe结尾的，根据自己的系统架构下载合适的安装文件，通常下载带有“win_amd64.exe”或“x64-installer.exe”结尾的文件  
-- Mac下载.dmg结尾即可  
-- Linux根据系统类型下载对应的执行文件或安装文件  
 
-## Windows安装过程
-- 双击下载好的exe 正常安装即可，首次打开记得右键管理员运行
+前往项目 Releases 页面下载适合你操作系统的安装包：  
+👉 **[下载页面](https://github.com/icpjimait/res-downloader/releases)**
 
-## Mac安装过程
-- 双击下载好的dmg文件，将res-downloader拖入应用即可，如图:  
-![installation-mac-1.png](images/installation-mac-1.png ':size=50%')
+---
 
-## Linux安装过程(自行替换掉对应的安装文件目录)
-- ubuntu安装deb文件
-> sudo apt install res-downloader_3.0.2_linux_x64.deb
+## 🪟 Windows 安装与运行
+1. 下载 `res-downloader-windows-amd64.zip`。
+2. 解压压缩包到任意目录。
+3. 双击 `res-downloader.exe` 即可直接运行。
+4. **提示**：
+   - 首次运行建议右键选择“以管理员身份运行”以确保证书正确配置。
+   - 点击窗口右上角关闭按钮时，软件将保持后台运行并**最小化至右下角系统托盘**。
+   - 重复打开软件时，将自动激活并置顶已有窗口，不会重复创建进程。
 
-- 执行文件运行方式
-> chmod +x ./res-downloader_3.0.2_linux_x64
-> sudo ./res-downloader_3.0.2_linux_x64
+---
 
+## 🍎 macOS 安装与运行
+1. 下载 `res-downloader-macos-universal.zip`（通用包，原生支持 Apple Silicon M1/M2/M3 及 Intel 芯片）。
+2. 解压后将 `res-downloader.app` 拖入 `Applications`（应用程序）文件夹即可。
+3. **如提示“已损坏”或“无法验证开发者”**：
+   - 打开 Mac 终端执行：
+   ```bash
+   sudo xattr -d com.apple.quarantine /Applications/res-downloader.app
+   ```
 
+---
+
+## 🐧 Linux 安装与运行
+1. 下载 `res-downloader-linux-amd64.tar.gz`。
+2. 解压并赋予执行权限：
+   ```bash
+   tar -zxvf res-downloader-linux-amd64.tar.gz
+   chmod +x ./res-downloader
+   ./res-downloader
+   ```
+3. **依赖要求**：系统需安装 `libgtk-3` 及 `webkit2gtk`（Ubuntu/Debian 用户可通过 `sudo apt install libgtk-3-0 libwebkit2gtk-4.0-37` 安装）。

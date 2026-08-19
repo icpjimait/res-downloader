@@ -1,7 +1,7 @@
 <div align="center">
 
 <a href="https://github.com/icpjimait/res-downloader"><img src="docs/images/logo.png" width="120"/></a>
-<h1>res-downloader</h1>
+<h1>res-downloader (Enhanced Edition)</h1>
 <p>基于 Go + Wails + Vue 3 的高性能、现代化跨平台网络资源嗅探与下载神器</p>
 
 [![GitHub stars](https://img.shields.io/github/stars/icpjimait/res-downloader)](https://github.com/icpjimait/res-downloader/stargazers)
@@ -14,17 +14,21 @@
 
 ---
 
-### 🎉 项目介绍
-
-> **res-downloader** 是一款集 **网络资源嗅探 + 高速多线程下载 + 视频解密** 于一体的现代化跨平台桌面应用。
-> 采用 **Go + [Wails v2](https://github.com/wailsapp/wails) + Vue 3 + Naive UI** 构建，兼具极高的运行性能与优雅现代的交互体验。
+> 💡 **特别说明（Enhanced Edition 二次开发版本）**  
+> 本项目基于原版开源项目 [putyy/res-downloader](https://github.com/putyy/res-downloader) 进行深度二次开发与功能增强。  
+> 在完整保留原版全部嗅探与下载能力的基础上，重点对用户体验、多平台打包和系统级交互进行了深度优化与魔改增强：
+> - 🚀 **多平台云端自动化构建**：接入 GitHub Actions CI/CD 流水线，一键自动编译发布 Windows、macOS (Universal M系列/Intel) 以及 Linux 安装包。
+> - 📌 **系统托盘后台运行**：点击窗口关闭按钮不退出，自动最小化缩至系统通知区域托盘，支持左键唤起与右键托盘快捷菜单。
+> - 🛡️ **单实例防多开限制**：防止重复启动导致代理端口冲突，二次打开时自动唤起并置顶已有主窗口并友好提示。
+> - 📂 **保存路径文件追踪定位**：在保存路径中点击“打开目录”时，直接在操作系统文件管理器中**自动打开并高亮选中**目标文件。
+> - 🔍 **音视频预览弹窗直接下载**：预览音视频时支持在模态框内一键直接发起下载，实时联动任务队列与已下载状态。
 
 ---
 
 ## ✨ 核心功能与特色
 
 - 🚀 **极致体验**：简洁现代的 UI 界面，支持深色/浅色主题自由切换。
-- 🖥️ **跨平台支持**：全面支持 **Windows / macOS (Apple Silicon & Intel) / Linux**。
+- 🖥️ **全平台支持**：全面支持 **Windows / macOS (Apple Silicon & Intel) / Linux**。
 - 📦 **多平台自动构建**：集成 GitHub Actions 云端流水线，多系统安装包自动化编译与发布。
 - 🌐 **全类型资源嗅探**：支持视频、音频、图片、m3u8 分片、直播流等多种格式自动捕获。
 - 📱 **广泛平台兼容**：支持微信视频号（含自动解密）、小程序、抖音、快手、小红书、酷狗、QQ音乐等主流平台。
@@ -84,7 +88,8 @@ wails build -platform darwin/universal
 
 欢迎提交 Issue 和 Pull Request！提交 PR 前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
-* 本项目基于开源社区优秀项目二次开发与增强，感谢所有原作者与贡献者的辛勤付出。
+* 原版项目：[putyy/res-downloader](https://github.com/putyy/res-downloader)
+* 感谢原作者与所有开源社区贡献者的辛勤付出。
 
 ---
 

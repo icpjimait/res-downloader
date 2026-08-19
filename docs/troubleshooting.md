@@ -75,4 +75,4 @@ sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keyc
 例如 mac系统下终端执行如下命令即可创建  
 > touch /Users/你的用户名/Library/Preferences/res-downloader/install.lock
 
-## 更多问题 请前往github进行[反馈](https://github.com/putyy/res-downloader/issues)
+## 更多问题 请前往 GitHub 进行[反馈](https://github.com/icpjimait/res-downloader/issues)
