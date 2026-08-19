@@ -43,6 +43,11 @@ func (p *DefaultPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *
 	lowerUrl := strings.ToLower(rawUrl)
 	host := strings.ToLower(resp.Request.Host)
 
+	// 忽略 DASH / MSE 裸分片（如 media-video-avc1, media-audio-mp4a，缺少音轨或完整头信息）
+	if strings.Contains(lowerUrl, "media-video-") || strings.Contains(lowerUrl, "media-audio-") {
+		return resp
+	}
+
 	// 特别针对抖音 / 字节跳动 / 西瓜视频媒体 CDN 进行精准视频特征识别（排除常规 API 与上报请求）
 	isByteDanceVideo := strings.Contains(host, "douyinvod.com") ||
 		strings.Contains(lowerUrl, "/video/tos/") ||

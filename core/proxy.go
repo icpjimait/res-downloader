@@ -26,6 +26,7 @@ var pluginRegistry = make(map[string]shared.Plugin)
 func init() {
 	ps := []shared.Plugin{
 		&plugins.QqPlugin{},
+		&plugins.DouyinPlugin{},
 		&plugins.DefaultPlugin{},
 	}
 
