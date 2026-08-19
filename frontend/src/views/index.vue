@@ -361,13 +361,22 @@ const columns = ref<any[]>([
     minWidth: 100,
     maxWidth: 800,
     resizable: true,
-    render: (row: appType.MediaInfo, index: number) => {
-      return h(ShowOrEdit, {
-        value: row.Description,
-        onUpdateValue(v: string) {
-          data.value[index].Description = v
-          cacheData()
-        }
+    render: (row: appType.MediaInfo) => {
+      const text = row.Description || "—"
+      if (!row.Description) {
+        return h('span', {style: 'color: var(--text-faint); font-size: 12px;'}, '—')
+      }
+      return h(NTooltip, {
+        trigger: 'hover',
+        placement: 'top',
+        interactive: true
+      }, {
+        trigger: () => h('span', {
+          style: 'color: var(--text); font-size: 12px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default;'
+        }, text),
+        default: () => h('div', {
+          style: 'max-width: 450px; font-size: 12px; word-break: break-all; line-height: 1.5;'
+        }, text)
       })
     }
   },
