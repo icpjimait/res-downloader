@@ -6,9 +6,13 @@ on:
       - 'v*' # 当你推送如 v1.0.0 的版本标签时自动触发构建发布
   workflow_dispatch: # 同时也支持你在 GitHub 网页上随时手动点击“一键构建”
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           # Windows 构建
