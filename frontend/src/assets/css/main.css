@@ -320,6 +320,17 @@
   border-bottom: 1px solid var(--border-soft) !important;
 }
 
+.n-data-table .n-data-table-th__resize-button {
+  width: 6px !important;
+  cursor: col-resize !important;
+  transition: background-color 0.2s ease;
+}
+
+.n-data-table .n-data-table-th__resize-button:hover,
+.n-data-table .n-data-table-th__resize-button--active {
+  background-color: var(--accent) !important;
+}
+
 .n-data-table .n-data-table-td {
   color: var(--text) !important;
   border-bottom: 1px solid var(--border-soft) !important;

@@ -270,14 +270,17 @@ const columns = ref<any[]>([
       return t('index.domain')
     },
     key: "Domain",
-    width: 90,
+    width: 130,
+    minWidth: 80,
+    maxWidth: 500,
+    resizable: true,
     render: (row: appType.MediaInfo) => {
       return h(NTooltip, {
         trigger: 'hover',
         placement: 'top'
       }, {
         trigger: () => h('span', {
-          style: 'color: var(--text-dim); cursor: default;'
+          style: 'color: var(--text-dim); cursor: default; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;'
         }, row.Domain),
         default: () => h('span', {class: 'mono', style: 'font-size: 11px; word-break: break-all;'}, row.Url)
       })
@@ -354,7 +357,10 @@ const columns = ref<any[]>([
   {
     title: computed(() => t("index.description")),
     key: "Description",
-    width: 150,
+    width: 180,
+    minWidth: 100,
+    maxWidth: 800,
+    resizable: true,
     render: (row: appType.MediaInfo, index: number) => {
       return h(ShowOrEdit, {
         value: row.Description,
@@ -377,6 +383,8 @@ const columns = ref<any[]>([
   {
     title: computed(() => t("index.save_path")),
     key: "SavePath",
+    minWidth: 150,
+    resizable: true,
     render(row: appType.MediaInfo) {
       const pathText = row.Status === "running" ? "" : row.SavePath;
       const pathElement = h("span",
