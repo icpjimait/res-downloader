@@ -28,6 +28,10 @@ func (p *DefaultPlugin) OnRequest(r *http.Request, ctx *goproxy.ProxyCtx) (*http
 }
 
 func (p *DefaultPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+	if p.bridge.IsProxy != nil && !p.bridge.IsProxy() {
+		return resp
+	}
+
 	if resp == nil || resp.Request == nil || (resp.StatusCode != 200 && resp.StatusCode != 206 && resp.StatusCode != 304) {
 		return resp
 	}
@@ -39,20 +43,15 @@ func (p *DefaultPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *
 	lowerUrl := strings.ToLower(rawUrl)
 	host := strings.ToLower(resp.Request.Host)
 
-	// 特别针对抖音 / 字节跳动 / 西瓜视频及常见流媒体 CDN 进行智能特征识别与纠偏
-	isByteDance := strings.Contains(host, "douyinvod.com") ||
-		strings.Contains(host, "douyin.com") ||
-		strings.Contains(host, "snssdk.com") ||
-		strings.Contains(host, "amemv.com") ||
-		strings.Contains(host, "bytegoofy.com") ||
-		strings.Contains(host, "zijieapi.com") ||
-		strings.Contains(host, "ixigua.com") ||
-		strings.Contains(host, "huoshan.com") ||
+	// 特别针对抖音 / 字节跳动 / 西瓜视频媒体 CDN 进行精准视频特征识别（排除常规 API 与上报请求）
+	isByteDanceVideo := strings.Contains(host, "douyinvod.com") ||
 		strings.Contains(lowerUrl, "/video/tos/") ||
 		strings.Contains(lowerUrl, "/tos-cn-") ||
-		strings.Contains(lowerUrl, "aweme/v1/play")
+		strings.Contains(lowerUrl, "aweme/v1/play") ||
+		((strings.Contains(host, "snssdk.com") || strings.Contains(host, "amemv.com") || strings.Contains(host, "douyin.com") || strings.Contains(host, "ixigua.com")) &&
+			(strings.Contains(lowerUrl, ".mp4") || strings.Contains(contentType, "video") || strings.Contains(contentType, "tos")))
 
-	if isByteDance {
+	if isByteDanceVideo {
 		if classify == "" || classify == "stream" {
 			classify = "video"
 			suffix = ".mp4"
@@ -111,13 +110,13 @@ func (p *DefaultPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *
 
 		if classify == "image" {
 			if minSize, ok := p.bridge.GetConfig("MinImageSize").(int); ok && minSize > 0 {
-				if value > 0 && value < float64(minSize*1024) {
+				if value < float64(minSize*1024) {
 					return resp
 				}
 			}
-		} else if classify == "video" || classify == "live" || classify == "m3u8" {
+		} else if classify == "video" || classify == "m3u8" {
 			if minSize, ok := p.bridge.GetConfig("MinVideoSize").(int); ok && minSize > 0 {
-				if value > 0 && value < float64(minSize*1024) {
+				if value < float64(minSize*1024) {
 					return resp
 				}
 			}
@@ -148,7 +147,7 @@ func (p *DefaultPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *
 		for k, v := range resp.Request.Header {
 			reqHeaders[k] = v
 		}
-		if isByteDance && reqHeaders.Get("Referer") == "" {
+		if isByteDanceVideo && reqHeaders.Get("Referer") == "" {
 			reqHeaders.Set("Referer", "https://www.douyin.com/")
 		}
 

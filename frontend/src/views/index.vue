@@ -564,6 +564,7 @@ onMounted(() => {
   eventStore.addHandle({
     type: "newResources",
     event: (res: any) => {
+      if (!isProxy.value) return
       pulseBuffer++
       if (downloadHistory.value[res.UrlSign]) {
         res.Status = "done"

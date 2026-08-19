@@ -30,6 +30,10 @@ func (p *QqPlugin) Domains() []string {
 }
 
 func (p *QqPlugin) OnRequest(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+	if p.bridge.IsProxy != nil && !p.bridge.IsProxy() {
+		return nil, nil
+	}
+
 	if strings.Contains(r.Host, "qq.com") && strings.Contains(r.URL.Path, "/res-downloader/wechat") {
 		if p.bridge.GetConfig("WxAction").(bool) && r.URL.Query().Get("type") == "1" {
 			return p.handleWechatRequest(r, ctx)
@@ -44,6 +48,10 @@ func (p *QqPlugin) OnRequest(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Requ
 }
 
 func (p *QqPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+	if p.bridge.IsProxy != nil && !p.bridge.IsProxy() {
+		return nil
+	}
+
 	if resp.StatusCode != 200 && resp.StatusCode != 206 {
 		return nil
 	}

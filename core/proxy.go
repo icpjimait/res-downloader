@@ -51,6 +51,9 @@ func init() {
 		Send: func(t string, data interface{}) {
 			httpServerOnce.send(t, data)
 		},
+		IsProxy: func() bool {
+			return appOnce != nil && appOnce.IsProxy
+		},
 	}
 
 	for _, p := range ps {
