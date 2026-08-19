@@ -32,4 +32,5 @@
 
 ## 6. 系统设置说明
 !> 修改配置后记得点击保存，部分底层配置重启后生效。  
-![config.png](images/config.png ':size=30%')
+![](images/preview-setting-basic.png ':size=60%')  
+![](images/preview-setting-advance.png ':size=60%')

@@ -25,6 +25,29 @@
 
 ---
 
+## 🖼️ 界面预览
+
+### 1. 软件主界面与保存路径定位
+> 嗅探捕获多媒体资源列表，悬浮查看完整保存路径并支持一键在文件管理器中**定位高亮选中目标文件**：
+<div align="center">
+  <img src="docs/images/preview-list-path.png" width="90%" alt="主界面与路径追踪"/>
+</div>
+
+### 2. 视频实时预览与「直接下载」
+> 预览音视频播放弹窗，右上角集成一键下载按钮，支持边预览边直接发起下载：
+<div align="center">
+  <img src="docs/images/preview-video-download.png" width="90%" alt="视频预览与直接下载"/>
+</div>
+
+### 3. 基础设置与高级配置
+> 支持保存目录配置、深浅主题切换、多语言切换、网络代理与并发连接数精细调优：
+<div align="center">
+  <img src="docs/images/preview-setting-basic.png" width="48%" alt="基础设置"/>
+  <img src="docs/images/preview-setting-advance.png" width="48%" alt="高级设置"/>
+</div>
+
+---
+
 ## ✨ 核心功能与特色
 
 - 🚀 **极致体验**：简洁现代的 UI 界面，支持深色/浅色主题自由切换。
