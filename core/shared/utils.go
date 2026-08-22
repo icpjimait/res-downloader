@@ -104,6 +104,18 @@ func GetFileNameFromURL(rawUrl string) string {
 	return fileName
 }
 
+func SanitizeFileName(name string) string {
+	re := regexp.MustCompile(`[<>:"/\\|?*\r\n\t]`)
+	cleaned := re.ReplaceAllString(name, "_")
+	cleaned = strings.TrimFunc(cleaned, func(r rune) bool {
+		return r == '.' || r == ' '
+	})
+	if cleaned == "" {
+		cleaned = "media"
+	}
+	return cleaned
+}
+
 func GetCurrentDateTimeFormatted() string {
 	now := time.Now()
 	return fmt.Sprintf("%04d%02d%02d%02d%02d%02d",
@@ -177,4 +189,52 @@ func OpenFolder(filePath string) error {
 	}
 
 	return cmd.Start()
+}
+
+func FindFFmpegPath() string {
+	if p, err := exec.LookPath("ffmpeg"); err == nil {
+		return p
+	}
+
+	exePath, err := os.Executable()
+	exeDir := ""
+	if err == nil {
+		exeDir = filepath.Dir(exePath)
+	}
+
+	candidates := []string{
+		"./ffmpeg/ffmpeg.exe",
+		"./ffmpeg.exe",
+		"./bin/ffmpeg.exe",
+		"ffmpeg/ffmpeg.exe",
+		"ffmpeg.exe",
+		filepath.Join(exeDir, "ffmpeg", "ffmpeg.exe"),
+		filepath.Join(exeDir, "ffmpeg.exe"),
+		filepath.Join(exeDir, "bin", "ffmpeg.exe"),
+		filepath.Join(exeDir, "..", "ffmpeg", "ffmpeg.exe"),
+	}
+
+	for _, c := range candidates {
+		if c != "" && FileExist(c) {
+			if abs, err := filepath.Abs(c); err == nil {
+				return abs
+			}
+			return c
+		}
+	}
+	return ""
+}
+
+func MergeMediaWithFFmpeg(videoPath, audioPath, outputPath string) error {
+	ffmpegPath := FindFFmpegPath()
+	if ffmpegPath == "" {
+		return errors.New("ffmpeg not found in PATH or local directory")
+	}
+
+	cmd := exec.Command(ffmpegPath, "-i", videoPath, "-i", audioPath, "-c", "copy", "-y", outputPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("ffmpeg merge error: %v, output: %s", err, string(output))
+	}
+	return nil
 }

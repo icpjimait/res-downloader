@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/elazarl/goproxy"
 	gonanoid "github.com/matoous/go-nanoid/v2"
@@ -185,6 +186,20 @@ func (p *BilibiliPlugin) extractFromHTML(reqUrl *url.URL, body []byte) {
 		}
 	}
 
+	// 提取 HTML 中的 title 标签作为保底
+	if meta.Title == "" {
+		titleRe := regexp.MustCompile(`<title.*?>(.*?)(?:_哔哩哔哩|_bilibili|</title>)`)
+		if match := titleRe.FindStringSubmatch(htmlStr); len(match) > 1 {
+			meta.Title = strings.TrimSpace(match[1])
+		}
+	}
+	if meta.Title == "" {
+		ogTitleRe := regexp.MustCompile(`<meta\s+property="og:title"\s+content="(.*?)"`)
+		if match := ogTitleRe.FindStringSubmatch(htmlStr); len(match) > 1 {
+			meta.Title = strings.TrimSpace(match[1])
+		}
+	}
+
 	// 提取 playinfo (获取 DASH 播放地址)
 	playRe := regexp.MustCompile(`window\.__playinfo__\s*=\s*(\{.*?\})</script>`)
 	if match := playRe.FindStringSubmatch(htmlStr); len(match) > 1 {
@@ -210,27 +225,33 @@ func (p *BilibiliPlugin) extractPlayUrl(reqUrl *url.URL, body []byte) {
 
 	// 匹配关联的视频元信息
 	meta := BiliMeta{}
+	var bvid, cid, avid string
 	if reqUrl != nil {
 		q := reqUrl.Query()
-		if bvid := q.Get("bvid"); bvid != "" {
+		bvid = q.Get("bvid")
+		cid = q.Get("cid")
+		avid = q.Get("avid")
+
+		if bvid != "" {
 			if val, ok := p.metaCache.Load(bvid); ok {
 				meta = val.(BiliMeta)
 			}
 		}
-		if meta.Title == "" {
-			if cid := q.Get("cid"); cid != "" {
-				if val, ok := p.metaCache.Load(cid); ok {
-					meta = val.(BiliMeta)
-				}
+		if meta.Title == "" && cid != "" {
+			if val, ok := p.metaCache.Load(cid); ok {
+				meta = val.(BiliMeta)
 			}
 		}
-		if meta.Title == "" {
-			if avid := q.Get("avid"); avid != "" {
-				if val, ok := p.metaCache.Load(avid); ok {
-					meta = val.(BiliMeta)
-				}
+		if meta.Title == "" && avid != "" {
+			if val, ok := p.metaCache.Load(avid); ok {
+				meta = val.(BiliMeta)
 			}
 		}
+	}
+
+	// 若尚未缓存到真实标题，主动向 B站 API 实时查询该视频的真实标题与 UP 主
+	if meta.Title == "" && (bvid != "" || avid != "") {
+		meta = p.fetchMetaByBvidOrAid(bvid, avid, cid)
 	}
 
 	if meta.Title == "" {
@@ -241,14 +262,30 @@ func (p *BilibiliPlugin) extractPlayUrl(reqUrl *url.URL, body []byte) {
 	isVideo, _ := p.bridge.GetResType("video")
 	isAudio, _ := p.bridge.GetResType("audio")
 
-	// 1. 解析 DASH 格式（包含独立的最高画质视频流与音频流）
+	hasDash := false
+
+	// 1. 解析 DASH 格式（提取最高画质视频流与最高音质音频流并自动绑定）
 	if dash, ok := data["dash"].(map[string]interface{}); ok {
 		duration, _ := dash["duration"].(float64)
 
-		// 视频轨
+		// 提取最高品质音频轨 URL
+		var bestAudioUrl string
+		if audioList, ok := dash["audio"].([]interface{}); ok && len(audioList) > 0 {
+			var maxBandwidth float64 = -1
+			for _, item := range audioList {
+				if aMap, ok := item.(map[string]interface{}); ok {
+					bw, _ := aMap["bandwidth"].(float64)
+					if bw > maxBandwidth {
+						maxBandwidth = bw
+						bestAudioUrl = p.extractUrlFromMediaMap(aMap)
+					}
+				}
+			}
+		}
+
+		// 视频轨（绑定伴音地址，下载时自动混流合成完整有声视频）
 		if isAll || isVideo {
 			if videoList, ok := dash["video"].([]interface{}); ok && len(videoList) > 0 {
-				// 寻找最高画质的视频轨
 				var bestVideo map[string]interface{}
 				var bestQuality float64 = -1
 
@@ -272,50 +309,41 @@ func (p *BilibiliPlugin) extractPlayUrl(reqUrl *url.URL, body []byte) {
 							estimatedSize = (bandwidth * duration) / 8
 						}
 
-						videoDesc := fmt.Sprintf("[%s] %s", qualityName, meta.Title)
+						// 格式化描述：[1080P高清] B站视频 - 视频标题
+						videoDesc := ""
+						if meta.Title != "" && meta.Title != "B站视频" {
+							videoDesc = fmt.Sprintf("[%s] B站视频 - %s", qualityName, meta.Title)
+						} else {
+							videoDesc = fmt.Sprintf("[%s] B站视频", qualityName)
+						}
 						if meta.Up != "" {
-							videoDesc = fmt.Sprintf("[%s] %s - %s", qualityName, meta.Title, meta.Up)
+							videoDesc = fmt.Sprintf("%s - %s", videoDesc, meta.Up)
 						}
 
-						p.sendMedia(playUrl, "video", ".mp4", "video/mp4", videoDesc, meta.Pic, estimatedSize)
+						p.sendMediaWithAudio(playUrl, "video", ".mp4", "video/mp4", videoDesc, meta.Pic, estimatedSize, bestAudioUrl)
+						hasDash = true
 					}
 				}
 			}
 		}
 
-		// 音频轨
-		if isAll || isAudio {
-			if audioList, ok := dash["audio"].([]interface{}); ok && len(audioList) > 0 {
-				var bestAudio map[string]interface{}
-				var maxBandwidth float64 = -1
-
-				for _, item := range audioList {
-					if aMap, ok := item.(map[string]interface{}); ok {
-						bw, _ := aMap["bandwidth"].(float64)
-						if bw > maxBandwidth {
-							maxBandwidth = bw
-							bestAudio = aMap
-						}
-					}
-				}
-
-				if bestAudio != nil {
-					playUrl := p.extractUrlFromMediaMap(bestAudio)
-					if playUrl != "" {
-						audioDesc := fmt.Sprintf("[音频轨] %s", meta.Title)
-						if meta.Up != "" {
-							audioDesc = fmt.Sprintf("[音频轨] %s - %s", meta.Title, meta.Up)
-						}
-
-						p.sendMedia(playUrl, "audio", ".mp3", "audio/mp4", audioDesc, meta.Pic, 0)
-					}
-				}
+		// 音频轨（提供独立音频提取）
+		if (isAll || isAudio) && bestAudioUrl != "" {
+			audioDesc := ""
+			if meta.Title != "" && meta.Title != "B站视频" {
+				audioDesc = fmt.Sprintf("[音频轨] B站音频 - %s", meta.Title)
+			} else {
+				audioDesc = "[音频轨] B站音频"
 			}
+			if meta.Up != "" {
+				audioDesc = fmt.Sprintf("%s - %s", audioDesc, meta.Up)
+			}
+			p.sendMedia(bestAudioUrl, "audio", ".mp3", "audio/mp4", audioDesc, meta.Pic, 0)
 		}
 	}
 
-	// 2. 解析传统 DURL 格式（单段/多段完整 MP4/FLV）
-	if isAll || isVideo {
+	// 2. 仅当不存在 DASH 格式时，才解析传统 DURL 格式或请求官方 HTML5 MP4 接口保底
+	if !hasDash && (isAll || isVideo) {
 		if durlList, ok := data["durl"].([]interface{}); ok && len(durlList) > 0 {
 			for idx, item := range durlList {
 				if dMap, ok := item.(map[string]interface{}); ok {
@@ -326,6 +354,7 @@ func (p *BilibiliPlugin) extractPlayUrl(reqUrl *url.URL, body []byte) {
 						if len(durlList) > 1 {
 							desc = fmt.Sprintf("%s (分段%d)", meta.Title, idx+1)
 						}
+						desc = fmt.Sprintf("[高清视频] B站视频 - %s", desc)
 						suffix := ".mp4"
 						if strings.Contains(playUrl, ".flv") {
 							suffix = ".flv"
@@ -334,8 +363,84 @@ func (p *BilibiliPlugin) extractPlayUrl(reqUrl *url.URL, body []byte) {
 					}
 				}
 			}
+		} else if reqUrl != nil {
+			q := reqUrl.Query()
+			bvid := q.Get("bvid")
+			cid := q.Get("cid")
+			avid := q.Get("avid")
+			if (bvid != "" || avid != "") && cid != "" {
+				go p.fetchHtml5Mp4(bvid, cid, avid, meta.Title, meta.Pic)
+			}
 		}
 	}
+}
+
+// 主动通过 B站 官方 API 查询视频的真实标题、UP主、封面
+func (p *BilibiliPlugin) fetchMetaByBvidOrAid(bvid, avid, cid string) BiliMeta {
+	apiUrl := ""
+	if bvid != "" {
+		apiUrl = "https://api.bilibili.com/x/web-interface/view?bvid=" + url.QueryEscape(bvid)
+	} else if avid != "" {
+		apiUrl = "https://api.bilibili.com/x/web-interface/view?aid=" + url.QueryEscape(avid)
+	}
+
+	if apiUrl == "" {
+		return BiliMeta{}
+	}
+
+	req, err := http.NewRequest("GET", apiUrl, nil)
+	if err != nil {
+		return BiliMeta{}
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36")
+	req.Header.Set("Referer", "https://www.bilibili.com/")
+
+	client := &http.Client{Timeout: 4 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return BiliMeta{}
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return BiliMeta{}
+	}
+
+	var res map[string]interface{}
+	if err := json.Unmarshal(body, &res); err != nil {
+		return BiliMeta{}
+	}
+
+	if data, ok := res["data"].(map[string]interface{}); ok {
+		title, _ := data["title"].(string)
+		desc, _ := data["desc"].(string)
+		pic, _ := data["pic"].(string)
+		up := ""
+		if owner, ok := data["owner"].(map[string]interface{}); ok {
+			up, _ = owner["name"].(string)
+		}
+
+		meta := BiliMeta{
+			Title: strings.TrimSpace(title),
+			Desc:  strings.TrimSpace(desc),
+			Pic:   pic,
+			Up:    strings.TrimSpace(up),
+		}
+
+		if bvid != "" {
+			p.metaCache.Store(bvid, meta)
+		}
+		if avid != "" {
+			p.metaCache.Store(avid, meta)
+		}
+		if cid != "" {
+			p.metaCache.Store(cid, meta)
+		}
+		return meta
+	}
+
+	return BiliMeta{}
 }
 
 // 处理直接通过 CDN 请求的媒体流
@@ -412,6 +517,10 @@ func (p *BilibiliPlugin) handleDirectMedia(resp *http.Response) {
 }
 
 func (p *BilibiliPlugin) sendMedia(playUrl, classify, suffix, contentType, desc, coverUrl string, size float64) {
+	p.sendMediaWithAudio(playUrl, classify, suffix, contentType, desc, coverUrl, size, "")
+}
+
+func (p *BilibiliPlugin) sendMediaWithAudio(playUrl, classify, suffix, contentType, desc, coverUrl string, size float64, audioUrl string) {
 	urlSign := shared.Md5(playUrl)
 	if p.bridge.MediaIsMarked(urlSign) {
 		return
@@ -439,6 +548,9 @@ func (p *BilibiliPlugin) sendMedia(playUrl, classify, suffix, contentType, desc,
 	if hJson, err := json.Marshal(reqHeaders); err == nil {
 		otherData["headers"] = string(hJson)
 	}
+	if audioUrl != "" {
+		otherData["audio_url"] = audioUrl
+	}
 
 	res := shared.MediaInfo{
 		Id:          id,
@@ -459,6 +571,53 @@ func (p *BilibiliPlugin) sendMedia(playUrl, classify, suffix, contentType, desc,
 
 	p.bridge.MarkMedia(urlSign)
 	p.bridge.Send("newResources", res)
+}
+
+// 异步请求 B站 HTML5 单文件 MP4 接口（已将音视频原生混合封装在一路 MP4 容器中）
+func (p *BilibiliPlugin) fetchHtml5Mp4(bvid, cid, avid, title, pic string) {
+	apiUrl := fmt.Sprintf("https://api.bilibili.com/x/player/playurl?bvid=%s&avid=%s&cid=%s&qn=80&platform=html5&high_quality=1", bvid, avid, cid)
+	req, err := http.NewRequest("GET", apiUrl, nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36")
+	req.Header.Set("Referer", "https://www.bilibili.com/")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+
+	var res map[string]interface{}
+	if err := json.Unmarshal(body, &res); err != nil {
+		return
+	}
+
+	if data, ok := res["data"].(map[string]interface{}); ok {
+		if durlList, ok := data["durl"].([]interface{}); ok && len(durlList) > 0 {
+			for idx, item := range durlList {
+				if dMap, ok := item.(map[string]interface{}); ok {
+					playUrl, _ := dMap["url"].(string)
+					size, _ := dMap["size"].(float64)
+					if playUrl != "" {
+						desc := title
+						if len(durlList) > 1 {
+							desc = fmt.Sprintf("%s (分段%d)", title, idx+1)
+						}
+						desc = fmt.Sprintf("[MP4有声] %s", desc)
+						p.sendMedia(playUrl, "video", ".mp4", "video/mp4", desc, pic, size)
+					}
+				}
+			}
+		}
+	}
 }
 
 func (p *BilibiliPlugin) extractUrlFromMediaMap(m map[string]interface{}) string {

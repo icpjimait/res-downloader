@@ -118,6 +118,17 @@ let decodeArr: any = null
 let mediaSource: MediaSource
 let rowUrl = ''
 
+let companionAudio: HTMLAudioElement | null = null
+
+const stopCompanionAudio = () => {
+  if (companionAudio) {
+    companionAudio.pause()
+    companionAudio.src = ""
+    companionAudio.load()
+    companionAudio = null
+  }
+}
+
 const props = defineProps<{
   showModal: boolean
   previewRow: any
@@ -147,6 +158,7 @@ const onAfterEnter = () => {
 }
 
 const onAfterLeave = () => {
+  stopCompanionAudio()
   if (props.previewRow.Classify === "live" && flvPlayer) {
     flvPlayer.unload()
     flvPlayer.detachMediaElement()
@@ -177,12 +189,59 @@ const playFlvStream = () => {
 
 const setupVideoJsPlayer = () => {
   if (!videoPlayer.value) return
+  stopCompanionAudio()
 
   if (!player) {
     player = videojs(videoPlayer.value, {
       controls: true,
       autoplay: false,
       preload: "auto",
+    })
+  }
+
+  // 检查是否有伴音音频轨（如 B站 DASH 音画分离流）
+  const audioUrl = props.previewRow?.OtherData?.audio_url
+  if (audioUrl) {
+    companionAudio = new Audio(window?.$baseUrl + "/api/preview?url=" + encodeURIComponent(audioUrl))
+    companionAudio.preload = "auto"
+    companionAudio.volume = player.volume() || 1
+    companionAudio.muted = player.muted() || false
+    companionAudio.playbackRate = player.playbackRate() || 1
+
+    player.on("play", () => {
+      companionAudio?.play().catch(() => {})
+    })
+    player.on("pause", () => {
+      companionAudio?.pause()
+    })
+    player.on("seeking", () => {
+      if (companionAudio && player) {
+        companionAudio.currentTime = player.currentTime() || 0
+      }
+    })
+    player.on("seeked", () => {
+      if (companionAudio && player) {
+        companionAudio.currentTime = player.currentTime() || 0
+      }
+    })
+    player.on("volumechange", () => {
+      if (companionAudio && player) {
+        companionAudio.volume = player.volume() || 1
+        companionAudio.muted = player.muted() || false
+      }
+    })
+    player.on("ratechange", () => {
+      if (companionAudio && player) {
+        companionAudio.playbackRate = player.playbackRate() || 1
+      }
+    })
+    player.on("timeupdate", () => {
+      if (companionAudio && player && !player.paused()) {
+        const diff = Math.abs(companionAudio.currentTime - (player.currentTime() || 0))
+        if (diff > 0.3) {
+          companionAudio.currentTime = player.currentTime() || 0
+        }
+      }
     })
   }
 

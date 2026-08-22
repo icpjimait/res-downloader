@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"res-downloader/core/shared"
 	"strconv"
 	"strings"
@@ -110,15 +109,17 @@ func (r *Resource) download(mediaInfo shared.MediaInfo, decodeStr string) {
 		}
 
 		if mediaInfo.Description != "" {
-			fileName = regexp.MustCompile(`[^\w\p{Han}]`).ReplaceAllString(mediaInfo.Description, "")
-			fileLen := globalConfig.FilenameLen
-			if fileLen <= 0 {
-				fileLen = 10
-			}
-
-			runes := []rune(fileName)
-			if len(runes) > fileLen {
-				fileName = string(runes[:fileLen])
+			fileName = shared.SanitizeFileName(mediaInfo.Description)
+			if globalConfig.FilenameLen > 0 {
+				runes := []rune(fileName)
+				if len(runes) > globalConfig.FilenameLen {
+					fileName = string(runes[:globalConfig.FilenameLen])
+				}
+			} else {
+				runes := []rune(fileName)
+				if len(runes) > 180 {
+					fileName = string(runes[:180])
+				}
 			}
 		}
 
@@ -184,6 +185,30 @@ func (r *Resource) download(mediaInfo shared.MediaInfo, decodeStr string) {
 			}
 			return
 		}
+
+		// 检查是否有伴音音频轨（如 B站 DASH 音画分离流）
+		if audioUrl, ok := mediaInfo.OtherData["audio_url"]; ok && audioUrl != "" && mediaInfo.Classify == "video" {
+			r.progressEventsEmit(mediaInfo, "正在下载音频伴音...", shared.DownloadStatusRunning)
+			tempAudioPath := mediaInfo.SavePath + ".audio.tmp"
+			audioDownloader := NewFileDownloader(audioUrl, tempAudioPath, globalConfig.TaskNumber, headers)
+			if audioErr := audioDownloader.Start(); audioErr == nil {
+				r.progressEventsEmit(mediaInfo, "正在合成音视频(FFmpeg)...", shared.DownloadStatusRunning)
+				tempVideoPath := mediaInfo.SavePath + ".video.tmp"
+				if renameErr := os.Rename(mediaInfo.SavePath, tempVideoPath); renameErr == nil {
+					mergeErr := shared.MergeMediaWithFFmpeg(tempVideoPath, tempAudioPath, mediaInfo.SavePath)
+					if mergeErr == nil {
+						_ = os.Remove(tempVideoPath)
+						_ = os.Remove(tempAudioPath)
+					} else {
+						// 若无 ffmpeg，还原主视频并将音频独立保存
+						_ = os.Rename(tempVideoPath, mediaInfo.SavePath)
+						audioDest := strings.TrimSuffix(mediaInfo.SavePath, filepath.Ext(mediaInfo.SavePath)) + "_音频.mp3"
+						_ = os.Rename(tempAudioPath, audioDest)
+					}
+				}
+			}
+		}
+
 		if decodeStr != "" {
 			r.progressEventsEmit(mediaInfo, "decrypting in progress", shared.DownloadStatusRunning)
 			if err := r.decodeWxFile(mediaInfo.SavePath, decodeStr); err != nil {
