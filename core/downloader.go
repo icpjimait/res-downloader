@@ -144,7 +144,7 @@ func (fd *FileDownloader) init() error {
 		fd.Referer = "https://www.kuaishou.com/"
 	} else if strings.Contains(host, "xiaohongshu.com") || strings.Contains(host, "xhscdn.com") {
 		fd.Referer = "https://www.xiaohongshu.com/"
-	} else if strings.Contains(host, "bilibili.com") || strings.Contains(host, "bilivideo.com") || strings.Contains(host, "hdslb.com") {
+	} else if strings.Contains(host, "bilibili.com") || strings.Contains(host, "bilivideo.com") || strings.Contains(host, "bilivideo.cn") || strings.Contains(host, "hdslb.com") || strings.Contains(host, "biliapi.net") {
 		fd.Referer = "https://www.bilibili.com/"
 	} else if parsedURL.Scheme != "" && parsedURL.Host != "" {
 		fd.Referer = parsedURL.Scheme + "://" + parsedURL.Host + "/"

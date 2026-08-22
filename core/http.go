@@ -99,7 +99,7 @@ func (h *HttpServer) preview(w http.ResponseWriter, r *http.Request) {
 		request.Header.Set("Referer", "https://www.kuaishou.com/")
 	} else if strings.Contains(host, "xiaohongshu.com") || strings.Contains(host, "xhscdn.com") {
 		request.Header.Set("Referer", "https://www.xiaohongshu.com/")
-	} else if strings.Contains(host, "bilibili.com") || strings.Contains(host, "bilivideo.com") || strings.Contains(host, "hdslb.com") {
+	} else if strings.Contains(host, "bilibili.com") || strings.Contains(host, "bilivideo.com") || strings.Contains(host, "bilivideo.cn") || strings.Contains(host, "hdslb.com") || strings.Contains(host, "biliapi.net") {
 		request.Header.Set("Referer", "https://www.bilibili.com/")
 	} else if parsedURL.Scheme != "" && parsedURL.Host != "" {
 		request.Header.Set("Referer", parsedURL.Scheme+"://"+parsedURL.Host+"/")

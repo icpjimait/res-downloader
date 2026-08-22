@@ -48,6 +48,14 @@ func (p *DefaultPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *
 		return resp
 	}
 
+	// 忽略 B站无用上报与非媒体流，避免被当做“流数据”展示
+	if strings.Contains(host, "bilivideo.com") || strings.Contains(host, "bilivideo.cn") ||
+		strings.Contains(host, "bilibili.com") || strings.Contains(host, "hdslb.com") {
+		if classify == "stream" || classify == "" {
+			return resp
+		}
+	}
+
 	// 特别针对抖音 / 字节跳动 / 西瓜视频媒体 CDN 进行精准视频特征识别（排除常规 API 与上报请求）
 	isByteDanceVideo := strings.Contains(host, "douyinvod.com") ||
 		strings.Contains(lowerUrl, "/video/tos/") ||

@@ -27,6 +27,7 @@ func init() {
 	ps := []shared.Plugin{
 		&plugins.QqPlugin{},
 		&plugins.DouyinPlugin{},
+		&plugins.BilibiliPlugin{},
 		&plugins.DefaultPlugin{},
 	}
 
