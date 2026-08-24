@@ -32,8 +32,8 @@ type KuaishouPlugin struct {
 }
 
 var (
-	ksPhotoIdRegex = regexp.MustCompile(`(?:short-video|photo|fw/photo)/([a-zA-Z0-9_-]+)`)
-	ksApolloRegex  = regexp.MustCompile(`window\.__APOLLO_STATE__\s*=\s*(\{.+?\});`)
+	ksPhotoIdRegex  = regexp.MustCompile(`(?:short-video|photo|fw/photo)/([a-zA-Z0-9_-]+)`)
+	ksApolloRegex   = regexp.MustCompile(`window\.__APOLLO_STATE__\s*=\s*(\{.+?\});`)
 	ksNextDataRegex = regexp.MustCompile(`<script\s+id="__NEXT_DATA__"[^>]*>(\{.+?\})</script>`)
 	ksInitStateRegex = regexp.MustCompile(`window\.INIT_STATE\s*=\s*(\{.+?\});`)
 )
@@ -99,33 +99,43 @@ func (p *KuaishouPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) 
 		return resp
 	}
 
-	// 3. 拦截并捕获快手媒体 CDN 视频流（.mp4、.m3u8、video/*、以及 yximgs/kwimgs 媒体资源）
-	isVideoStream := strings.Contains(contentType, "video") ||
-		strings.Contains(lowerUrl, ".mp4") ||
-		strings.Contains(lowerUrl, "/upic/") ||
-		strings.Contains(lowerUrl, "/bs2/gslb/") ||
-		strings.Contains(host, "yximgs.com") ||
-		strings.Contains(host, "kwimgs.com") ||
-		strings.Contains(host, "kspkg.com")
-
-	if isVideoStream {
-		classify, suffix := p.bridge.TypeSuffix(contentType)
-		if classify == "" || classify == "stream" {
+	// 3. 拦截并捕获快手媒体 CDN（视频、图片、音频等）
+	classify, suffix := p.bridge.TypeSuffix(contentType)
+	if classify == "" || classify == "stream" {
+		lowerPath := strings.ToLower(resp.Request.URL.Path)
+		if strings.HasSuffix(lowerPath, ".mp4") || strings.Contains(lowerPath, "/upic/") || strings.Contains(lowerPath, "/bs2/gslb/") {
 			classify = "video"
 			suffix = ".mp4"
+		} else if strings.HasSuffix(lowerPath, ".jpg") || strings.HasSuffix(lowerPath, ".jpeg") {
+			classify = "image"
+			suffix = ".jpg"
+		} else if strings.HasSuffix(lowerPath, ".png") {
+			classify = "image"
+			suffix = ".png"
+		} else if strings.HasSuffix(lowerPath, ".webp") {
+			classify = "image"
+			suffix = ".webp"
+		} else if strings.HasSuffix(lowerPath, ".m3u8") {
+			classify = "m3u8"
+			suffix = ".m3u8"
+		} else if strings.HasSuffix(lowerPath, ".flv") {
+			classify = "live"
+			suffix = ".flv"
 		}
+	}
 
-		isAll, _ := p.bridge.GetResType("all")
-		isVideo, _ := p.bridge.GetResType(classify)
-		if !isAll && !isVideo {
-			return resp
-		}
-
-		p.processMediaStream(resp, rawUrl, classify, suffix)
+	if classify == "" {
 		return resp
 	}
 
-	return nil
+	isAll, _ := p.bridge.GetResType("all")
+	isClassify, _ := p.bridge.GetResType(classify)
+	if !isAll && !isClassify {
+		return resp
+	}
+
+	p.processMediaStream(resp, rawUrl, classify, suffix)
+	return resp
 }
 
 func (p *KuaishouPlugin) extractKuaishouJson(body []byte) {
@@ -160,11 +170,10 @@ func (p *KuaishouPlugin) extractKuaishouHtml(body []byte) {
 	}
 }
 
-// 递归遍历 JSON 结构，提取所有快手视频对象
+// 递归遍历 JSON 结构，提取所有快手视频对象并建立元数据缓存
 func (p *KuaishouPlugin) findPhotosRecursively(node interface{}) {
 	switch val := node.(type) {
 	case map[string]interface{}:
-		// 检查当前 map 是否本身就是一个 Photo 对象或者包含 photo 字段
 		if isPhotoMap(val) {
 			p.processPhotoItem(val)
 		} else if photo, ok := val["photo"].(map[string]interface{}); ok {
@@ -302,15 +311,15 @@ func (p *KuaishouPlugin) processPhotoItem(photo map[string]interface{}) {
 		PlayUrl:  playUrl,
 	}
 
-	// 将元数据存入多级索引缓存
+	// 将元数据存入多级索引缓存池供流拦截时精准匹配
 	if photoId != "" {
 		p.metaCache.Store("id:"+photoId, meta)
 	}
 	if playUrl != "" {
 		p.cacheMetaByUrl(playUrl, meta)
-
-		// 直接推送资源到前端
-		p.emitResource(playUrl, meta)
+	}
+	if coverUrl != "" {
+		p.cacheMetaByUrl(coverUrl, meta)
 	}
 }
 
@@ -369,53 +378,6 @@ func (p *KuaishouPlugin) lookupMeta(rawUrl string, referer string) (KsMeta, bool
 	return KsMeta{}, false
 }
 
-func (p *KuaishouPlugin) emitResource(playUrl string, meta KsMeta) {
-	isAll, _ := p.bridge.GetResType("all")
-	isVideo, _ := p.bridge.GetResType("video")
-	if !isAll && !isVideo {
-		return
-	}
-
-	urlSign := shared.Md5(playUrl)
-	if p.bridge.MediaIsMarked(urlSign) {
-		return
-	}
-
-	id, err := gonanoid.New()
-	if err != nil {
-		id = urlSign
-	}
-
-	reqHeaders := make(http.Header)
-	reqHeaders.Set("Referer", "https://www.kuaishou.com/")
-	reqHeaders.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36")
-
-	otherData := map[string]string{}
-	if hJson, err := json.Marshal(reqHeaders); err == nil {
-		otherData["headers"] = string(hJson)
-	}
-
-	res := shared.MediaInfo{
-		Id:          id,
-		Url:         playUrl,
-		UrlSign:     urlSign,
-		CoverUrl:    meta.CoverUrl,
-		Size:        0,
-		Domain:      "kuaishou.com",
-		Classify:    "video",
-		Suffix:      ".mp4",
-		Status:      shared.DownloadStatusReady,
-		SavePath:    "",
-		DecodeKey:   "",
-		OtherData:   otherData,
-		Description: meta.Caption,
-		ContentType: "video/mp4",
-	}
-
-	p.bridge.MarkMedia(urlSign)
-	p.bridge.Send("newResources", res)
-}
-
 func (p *KuaishouPlugin) processMediaStream(resp *http.Response, rawUrl string, classify string, suffix string) {
 	urlSign := shared.Md5(rawUrl)
 	if p.bridge.MediaIsMarked(urlSign) {
@@ -432,12 +394,25 @@ func (p *KuaishouPlugin) processMediaStream(resp *http.Response, rawUrl string, 
 		}
 	}
 	if size == 0 {
-		size, _ = strconv.ParseFloat(resp.Header.Get("Content-Length"), 64)
+		if resp.ContentLength > 0 {
+			size = float64(resp.ContentLength)
+		} else {
+			size, _ = strconv.ParseFloat(resp.Header.Get("Content-Length"), 64)
+		}
 	}
 
-	if minSize, ok := p.bridge.GetConfig("MinVideoSize").(int); ok && minSize > 0 {
-		if size > 0 && size < float64(minSize*1024) {
-			return
+	// 严格执行图片和视频大小过滤规则
+	if classify == "image" {
+		if minSize, ok := p.bridge.GetConfig("MinImageSize").(int); ok && minSize > 0 {
+			if size < float64(minSize*1024) {
+				return
+			}
+		}
+	} else if classify == "video" || classify == "m3u8" {
+		if minSize, ok := p.bridge.GetConfig("MinVideoSize").(int); ok && minSize > 0 {
+			if size < float64(minSize*1024) {
+				return
+			}
 		}
 	}
 
@@ -456,7 +431,7 @@ func (p *KuaishouPlugin) processMediaStream(resp *http.Response, rawUrl string, 
 	}
 
 	if description == "" {
-		description = "快手视频"
+		description = "快手资源"
 	}
 
 	id, err := gonanoid.New()
@@ -487,7 +462,7 @@ func (p *KuaishouPlugin) processMediaStream(resp *http.Response, rawUrl string, 
 		DecodeKey:   "",
 		OtherData:   otherData,
 		Description: description,
-		ContentType: "video/mp4",
+		ContentType: resp.Header.Get("Content-Type"),
 	}
 
 	p.bridge.MarkMedia(urlSign)

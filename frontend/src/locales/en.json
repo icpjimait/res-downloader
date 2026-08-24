@@ -120,7 +120,7 @@
     "insert_tail": "Insert tail",
     "insert_tail_tip": "Intercept whether new data is added to the end of the list",
     "upstream_proxy": "Upstream Proxy",
-    "upstream_proxy_tip": "For combining with other proxy tools, format: http://username:password{'@'}your.proxy.server:port",
+    "upstream_proxy_tip": "For combining with external proxy tools (supports HTTP / SOCKS5), examples:\n• Local HTTP Proxy: http://127.0.0.1:7890\n• Local SOCKS5 Proxy: socks5://127.0.0.1:10808\n• With Authentication: http://username:password{'@'}127.0.0.1:7890\n• Remote Domain Proxy: http://user:pwd{'@'}proxy.example.com:8080",
     "download_proxy": "Download Proxy",
     "download_proxy_tip": "Whether to use upstream proxy for downloads",
     "user_agent_tip": "Keep default if unsure",

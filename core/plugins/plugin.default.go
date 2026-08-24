@@ -118,7 +118,11 @@ func (p *DefaultPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *
 			}
 		}
 		if value == 0 {
-			value, _ = strconv.ParseFloat(resp.Header.Get("content-length"), 64)
+			if resp.ContentLength > 0 {
+				value = float64(resp.ContentLength)
+			} else {
+				value, _ = strconv.ParseFloat(resp.Header.Get("content-length"), 64)
+			}
 		}
 
 		if classify == "image" {

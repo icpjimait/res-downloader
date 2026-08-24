@@ -120,7 +120,7 @@
     "insert_tail": "添入尾部",
     "insert_tail_tip": "拦截到新数据是否添加到列表尾部",
     "upstream_proxy": "上游代理",
-    "upstream_proxy_tip": "用于结合其他代理工具，格式: http://username:password{'@'}your.proxy.server:port",
+    "upstream_proxy_tip": "用于结合其他代理工具 (支持 HTTP / SOCKS5)，常见格式范例:\n• 本地 HTTP 代理: http://127.0.0.1:7890\n• 本地 SOCKS5 代理: socks5://127.0.0.1:10808\n• 带密码认证代理: http://username:password{'@'}127.0.0.1:7890\n• 远程域名代理: http://user:pwd{'@'}proxy.example.com:8080",
     "download_proxy": "下载代理",
     "download_proxy_tip": "下载操作时是否使用上游代理",
     "user_agent_tip": "如不清楚请保持默认",
