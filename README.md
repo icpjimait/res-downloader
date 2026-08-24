@@ -1,7 +1,7 @@
 <div align="center">
 
-<a href="https://github.com/icpjimait/res-downloader"><img src="docs/images/logo.png" width="120"/></a>
-<h1>res-downloader (Enhanced Edition)</h1>
+<a href="https://github.com/icpjimait/res-downloader"><img src="docs/images/logo.png" width="120" style="filter: drop-shadow(0 4px 12px rgba(255,83,118,0.3));"/></a>
+<h1>JIMA-Downloader (Enhanced Edition)</h1>
 <p>基于 Go + Wails + Vue 3 的高性能、现代化跨平台网络资源嗅探与下载神器</p>
 
 [![GitHub stars](https://img.shields.io/github/stars/icpjimait/res-downloader)](https://github.com/icpjimait/res-downloader/stargazers)
@@ -15,35 +15,44 @@
 ---
 
 > 💡 **特别说明（Enhanced Edition 二次开发版本）**  
-> 本项目基于原版开源项目 [putyy/res-downloader](https://github.com/putyy/res-downloader) 进行深度二次开发与功能增强。  
-> 在完整保留原版全部嗅探与下载能力的基础上，重点对用户体验、多平台打包和系统级交互进行了深度优化与魔改增强：
-> - 🚀 **多平台云端自动化构建**：接入 GitHub Actions CI/CD 流水线，一键自动编译发布 Windows、macOS (Universal M系列/Intel) 以及 Linux 安装包。
-> - 📌 **系统托盘后台运行**：点击窗口关闭按钮不退出，自动最小化缩至系统通知区域托盘，支持左键唤起与右键托盘快捷菜单。
-> - 🛡️ **单实例防多开限制**：防止重复启动导致代理端口冲突，二次打开时自动唤起并置顶已有主窗口并友好提示。
+> 本项目由 **集码IT (JiMaIT)** 基于原版开源项目 [putyy/res-downloader](https://github.com/putyy/res-downloader) 进行深度二次开发与功能增强。  
+> 在完整保留原版全部嗅探与下载能力的基础上，重点对用户体验、嗅探生态、多平台打包和系统级交互进行了深度优化与魔改增强：
+> - ⚡ **快手 / B站 / 抖音 / 视频号全生态深度解析**：内置各平台专属插件，自动拦截 API 解析完整标题、作者、封面与音视频直链。
+> - 🔍 **顶部常驻全局即时搜索**：无需弹窗即可直接在操作栏进行描述、URL 及域名的实时模糊过滤。
+> - 🎛️ **更多操作下拉菜单 UI**：批量操作采用跟手原生下拉菜单（`NDropdown`），告别臃肿弹窗。
+> - 🎥 **视频全屏沉浸播放与「直接下载」**：支持边看边直接发起下载，全屏模式支持自适应居中与等比缩放。
 > - 📂 **保存路径文件追踪定位**：在保存路径中点击“打开目录”时，直接在操作系统文件管理器中**自动打开并高亮选中**目标文件。
-> - 🔍 **音视频预览弹窗直接下载**：预览音视频时支持在模态框内一键直接发起下载，实时联动任务队列与已下载状态。
+> - 📌 **系统托盘后台运行**：点击窗口关闭按钮不退出，自动最小化缩至系统通知区域托盘，支持快捷唤起。
+> - 🛡️ **单实例防多开限制**：防止重复启动导致代理端口冲突，二次打开时自动唤起并置顶已有主窗口。
+> - 🚀 **多平台云端自动化构建**：接入 GitHub Actions CI/CD 流水线，一键自动编译发布 Windows、macOS (Universal M系列/Intel) 以及 Linux 安装包。
 
 ---
 
 ## 🖼️ 界面预览
 
-### 1. 软件主界面与保存路径定位
-> 嗅探捕获多媒体资源列表，悬浮查看完整保存路径并支持一键在文件管理器中**定位高亮选中目标文件**：
+### 1. 软件主界面与常驻搜索 / 批量操作
+> 嗅探捕获多媒体资源列表，支持顶部常驻全局即时搜索、更多操作原生下拉菜单、以及保存路径文件管理器**自动定位高亮选中**：
 <div align="center">
-  <img src="docs/images/preview-list-path.png" width="90%" alt="主界面与路径追踪"/>
+  <img src="docs/images/preview-main.png" width="92%" alt="主界面与下拉菜单"/>
 </div>
 
 ### 2. 视频实时预览与「直接下载」
-> 预览音视频播放弹窗，右上角集成一键下载按钮，支持边预览边直接发起下载：
+> 预览音视频播放弹窗，右上角集成「直接下载」按钮，支持边预览边直接发起下载并实时联动任务状态：
 <div align="center">
-  <img src="docs/images/preview-video-download.png" width="90%" alt="视频预览与直接下载"/>
+  <img src="docs/images/preview-video-download.png" width="92%" alt="视频预览与直接下载"/>
 </div>
 
-### 3. 基础设置与高级配置
-> 支持保存目录配置、深浅主题切换、多语言切换、网络代理与并发连接数精细调优：
+### 3. 沉浸式居中全屏播放
+> 视频全屏模式支持自适应画面比例（`object-fit: contain`），水平垂直绝对居中，带来沉浸式观影与审核体验：
 <div align="center">
-  <img src="docs/images/preview-setting-basic.png" width="48%" alt="基础设置"/>
+  <img src="docs/images/preview-video-fullscreen.png" width="92%" alt="全屏沉浸播放"/>
+</div>
+
+### 4. 系统设置与域名高级规则
+> 支持保存目录配置、深浅主题切换、智能置灰禁用联动、网络代理与并发连接数精细调优：
+<div align="center">
   <img src="docs/images/preview-setting-advance.png" width="48%" alt="高级设置"/>
+  <img src="docs/images/preview-setting-rules.png" width="48%" alt="域名规则"/>
 </div>
 
 ---
@@ -54,8 +63,13 @@
 - 🖥️ **全平台支持**：全面支持 **Windows / macOS (Apple Silicon & Intel) / Linux**。
 - 📦 **多平台自动构建**：集成 GitHub Actions 云端流水线，多系统安装包自动化编译与发布。
 - 🌐 **全类型资源嗅探**：支持视频、音频、图片、m3u8 分片、直播流等多种格式自动捕获。
-- 📱 **广泛平台兼容**：支持微信视频号（含自动解密）、小程序、抖音、快手、小红书、酷狗、QQ音乐等主流平台。
-- 🔍 **智能预览与直接下载**：支持音视频实时预览，预览弹窗内支持一键直接发起下载并实时联动进度。
+- 📱 **广泛平台兼容**：
+  - **快手（Kuaishou）**：GraphQL / REST API 递归解析，自动获取完整视频标题描述、作者与封面。
+  - **哔哩哔哩（B站）**：视频/音频/清晰度识别、音画双轨同频有声预览、FFmpeg 自动混流。
+  - **抖音（Douyin）**：自动提取高画质无水印直链与视频描述。
+  - **微信视频号**：自动拦截解密密钥，一键视频解密。
+  - **小红书、QQ音乐、酷狗** 等主流平台全面支持。
+- 🔍 **全局即时搜索**：常驻顶部输入框，毫秒级即时模糊搜索。
 - 📂 **保存路径文件追踪**：点击保存目录按钮，直接在系统资源管理器中**自动打开并高亮选中目标文件**。
 - 🛡️ **单实例运行限制**：避免多开造成端口冲突，重复打开时**自动唤起置顶已有主窗口并友好提示**。
 - 📌 **系统托盘后台运行**：点击关闭按钮可最小化至右下角通知区域托盘，支持左键唤起与右键托盘菜单。
@@ -71,9 +85,9 @@
 
 | 操作系统 | 推荐下载文件 | 说明 |
 | :--- | :--- | :--- |
-| **Windows** | `res-downloader-windows-amd64.zip` | 解压后双击 `res-downloader.exe` 即可使用 |
-| **macOS** | `res-downloader-macos-universal.zip` | 通用版本，兼容 M系列芯片 (M1/M2/M3) 及 Intel 芯片 |
-| **Linux** | `res-downloader-linux-amd64.tar.gz` | Linux 64位二进制包 |
+| **Windows** | `JIMA-Downloader-windows-amd64.zip` | 解压后双击 `JIMA-Downloader.exe` 即可使用 |
+| **macOS** | `JIMA-Downloader-macos-universal.zip` | 通用版本，兼容 M系列芯片 (M1/M2/M3/M4) 及 Intel 芯片 |
+| **Linux** | `JIMA-Downloader-linux-amd64.tar.gz` | Linux 64位二进制包 |
 
 ---
 
@@ -109,9 +123,10 @@ wails build -platform darwin/universal
 
 ## 🤝 参与贡献与致谢
 
-欢迎提交 Issue 和 Pull Request！提交 PR 前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
+欢迎提交 Issue 和 Pull Request！
 
 * 原版项目：[putyy/res-downloader](https://github.com/putyy/res-downloader)
+* 二次开发维护：[集码IT (JiMaIT)](https://github.com/icpjimait)
 * 感谢原作者与所有开源社区贡献者的辛勤付出。
 
 ---
