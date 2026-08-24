@@ -5,8 +5,8 @@
         <!-- Window Title Bar -->
         <div class="w-full flex justify-between items-center px-4 flex-shrink-0" style="height: 38px; background: var(--panel); border-bottom: 1px solid var(--border-soft); --wails-draggable:drag; user-select: none;">
           <div class="flex items-center gap-2" style="color: var(--text-dim); font-size: 12.5px; font-weight: 600;">
-            <img src="@/assets/image/logo.png" style="width: 18px; height: 18px; border-radius: 4px;" />
-            <span>{{ store.appInfo.AppName || 'Res Downloader' }}</span>
+            <img src="@/assets/image/logo.png" style="width: 20px; height: 20px; object-fit: contain;" />
+            <span>{{ store.appInfo.AppName || 'JIMA-Downloader' }}</span>
           </div>
           <Screen style="--wails-draggable:no-drag" v-if="store.envInfo.platform!=='darwin'" />
         </div>

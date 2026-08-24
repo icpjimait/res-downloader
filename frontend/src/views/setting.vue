@@ -14,12 +14,12 @@
 
         <!-- Storage Card -->
         <div class="dark-card">
-          <div class="dark-card-head"><div class="bar"></div><b>{{ t('setting.save_dir') }}</b></div>
+          <div class="dark-card-head"><div class="bar"></div><b>{{ t('setting.basic_setting') }}</b></div>
 
           <div class="field-row">
             <div class="field-info">
               <b>{{ t('setting.save_dir') }}</b>
-              <span>{{ t('setting.save_dir') }}</span>
+              <span>{{ t('setting.save_dir_tip') }}</span>
             </div>
             <div class="field-control">
               <NInput :value="formValue.SaveDirectory" :placeholder="t('setting.save_dir')" style="min-width: 260px;" class="mono"/>
@@ -29,8 +29,8 @@
 
           <div class="field-row">
             <div class="field-info">
-              <b>{{ t('menu.locale') }}</b>
-              <span>{{ t('menu.locale') }}</span>
+              <b>{{ t('setting.locale') }}</b>
+              <span>{{ t('setting.locale_tip') }}</span>
             </div>
             <div class="field-control">
               <NSelect v-model:value="formValue.Locale" :options="[{label: '简体中文', value: 'zh'}, {label: 'English', value: 'en'}]" style="min-width: 140px;"/>
@@ -39,8 +39,8 @@
 
           <div class="field-row">
             <div class="field-info">
-              <b>{{ t('menu.theme') }}</b>
-              <span>{{ t('menu.theme') }}</span>
+              <b>{{ t('setting.theme') }}</b>
+              <span>{{ t('setting.theme_tip') }}</span>
             </div>
             <div class="field-control">
               <NSelect v-model:value="formValue.Theme" :options="[{label: 'Dark', value: 'darkTheme'}, {label: 'Light', value: 'lightTheme'}]" style="min-width: 140px;"/>
@@ -53,7 +53,7 @@
               <span>{{ t('setting.filename_rules_tip') }}</span>
             </div>
             <div class="field-control">
-              <NInputNumber v-model:value="formValue.FilenameLen" :min="0" :max="9999" placeholder="0" style="width: 100px;"/>
+              <NInputNumber v-model:value="formValue.FilenameLen" :disabled="!formValue.FilenameTime" :min="0" :max="9999" placeholder="0" style="width: 100px;"/>
               <NSwitch v-model:value="formValue.FilenameTime"/>
             </div>
           </div>
@@ -71,7 +71,7 @@
 
         <!-- Capture Behavior Card -->
         <div class="dark-card">
-          <div class="dark-card-head"><div class="bar"></div><b>{{ t('setting.full_intercept') }}</b></div>
+          <div class="dark-card-head"><div class="bar"></div><b>{{ t('setting.intercept_setting') }}</b></div>
 
           <div class="field-row">
             <div class="field-info">
@@ -146,7 +146,7 @@
               <span>{{ t('setting.upstream_proxy_tip') }}</span>
             </div>
             <div class="field-control">
-              <NInput v-model:value="formValue.UpstreamProxy" placeholder="http://127.0.0.1:7890" class="mono" style="min-width: 220px;"/>
+              <NInput v-model:value="formValue.UpstreamProxy" :disabled="!formValue.OpenProxy" placeholder="http://127.0.0.1:7890" class="mono" style="min-width: 220px;"/>
               <NSwitch v-model:value="formValue.OpenProxy"/>
             </div>
           </div>

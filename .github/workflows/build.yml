@@ -18,20 +18,20 @@ jobs:
           # Windows 构建
           - os: windows-latest
             platform: windows/amd64
-            name: res-downloader-windows-amd64.zip
-            path: build/bin/res-downloader.exe
+            name: JIMA-Downloader-windows-amd64.zip
+            path: build/bin/JIMA-Downloader.exe
 
           # macOS 构建（Universal 通用二进制，支持 M系列芯片 + Intel 芯片）
           - os: macos-latest
             platform: darwin/universal
-            name: res-downloader-macos-universal.zip
-            path: build/bin/res-downloader.app
+            name: JIMA-Downloader-macos-universal.zip
+            path: build/bin/JIMA-Downloader.app
 
           # Linux 构建
           - os: ubuntu-22.04
             platform: linux/amd64
-            name: res-downloader-linux-amd64.tar.gz
-            path: build/bin/res-downloader
+            name: JIMA-Downloader-linux-amd64.tar.gz
+            path: build/bin/JIMA-Downloader
 
     runs-on: ${{ matrix.os }}
 
@@ -67,19 +67,19 @@ jobs:
       - name: Package Windows
         if: runner.os == 'Windows'
         run: |
-          Compress-Archive -Path build/bin/res-downloader.exe -DestinationPath ${{ matrix.name }}
+          Compress-Archive -Path build/bin/JIMA-Downloader.exe -DestinationPath ${{ matrix.name }}
 
       # 压缩打包 macOS 产物
       - name: Package macOS
         if: runner.os == 'macOS'
         run: |
-          cd build/bin && zip -r ../../${{ matrix.name }} res-downloader.app
+          cd build/bin && zip -r ../../${{ matrix.name }} JIMA-Downloader.app
 
       # 压缩打包 Linux 产物
       - name: Package Linux
         if: runner.os == 'Linux'
         run: |
-          tar -czvf ${{ matrix.name }} -C build/bin res-downloader
+          tar -czvf ${{ matrix.name }} -C build/bin JIMA-Downloader
 
       # 上传构建产物至 GitHub Artifacts（网页可随时下载）
       - name: Upload Artifact

@@ -358,6 +358,7 @@ const downloadChunk = () => {
   border-radius: 12px !important;
   overflow: hidden !important;
 }
+
 :deep(.vjs-tech) {
   position: static !important;
   width: auto !important;
@@ -366,8 +367,61 @@ const downloadChunk = () => {
   max-height: 75vh !important;
   border-radius: 12px !important;
   overflow: hidden !important;
+  object-fit: contain !important;
 }
+
 :deep(.vjs-poster) {
   background-size: contain !important;
+}
+
+/* ══════ 全屏状态修复：居中与全屏自适应 ══════ */
+:deep(.video-js.vjs-fullscreen) {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  background-color: #000 !important;
+  border-radius: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 99999 !important;
+}
+
+:deep(.video-js.vjs-fullscreen .vjs-tech) {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  margin: auto !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  object-fit: contain !important;
+  border-radius: 0 !important;
+}
+
+/* 浏览器原生全屏伪类支持 */
+:deep(video:fullscreen),
+:deep(video:-webkit-full-screen) {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  margin: auto !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  object-fit: contain !important;
+  background-color: #000 !important;
 }
 </style>

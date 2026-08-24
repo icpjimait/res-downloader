@@ -3,12 +3,12 @@
     <!-- Brand -->
     <div class="brand">
       <div class="relative">
-        <img src="@/assets/image/logo.png" alt="logo" />
+        <img src="@/assets/image/logo.png" alt="logo" style="width: 36px; height: 36px; object-fit: contain;" />
         <span v-if="showUpdate" class="absolute -right-1 -top-1 w-2 h-2 bg-red-500 rounded-full" style="animation: pulse-dot 1.6s infinite;"></span>
       </div>
       <div class="brand-text">
-        <b>{{ store.appInfo.AppName || 'Res Downloader' }}</b>
-        <span>RESOURCE STUDIO</span>
+        <b>{{ store.appInfo.AppName || 'JIMA-Downloader' }}</b>
+        <span>JIMA MEDIA STUDIO</span>
       </div>
     </div>
 
@@ -41,6 +41,11 @@
         github
       </div>
 
+      <div class="nav-item" @click="handleAction('cert')" style="--wails-draggable:no-drag">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+        {{ t('footer.cert_download') }}
+      </div>
+
       <div class="nav-item" @click="handleAction('about')" style="--wails-draggable:no-drag">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
         {{ t('menu.about') }}
@@ -69,6 +74,10 @@ const showUpdate = ref(false)
 
 const currentRoute = computed(() => route.fullPath.substring(1))
 
+const certUrl = computed(() => {
+  return store.baseUrl + "/api/cert"
+})
+
 watch(() => route.path, () => {})
 
 onMounted(() => {
@@ -85,12 +94,16 @@ const navigate = (key: string) => {
 }
 
 const handleAction = (key: string) => {
+  if (key === "cert") {
+    BrowserOpenURL(certUrl.value)
+    return
+  }
   if (key === "about") {
     showAppInfo.value = true
     return
   }
   if (key === "github") {
-    BrowserOpenURL("https://github.com/putyy/res-downloader")
+    BrowserOpenURL("https://github.com/icpjimait/res-downloader")
     return
   }
 

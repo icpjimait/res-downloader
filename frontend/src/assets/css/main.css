@@ -201,6 +201,8 @@
   font-weight: 500;
   cursor: pointer;
   font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: all 0.15s ease;
 }
 .btn-ghost:hover { color: var(--text); border-color: #3A4152; }
@@ -221,6 +223,8 @@
   border: none;
   cursor: pointer;
   font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: filter 0.15s ease;
 }
 .btn-solid:hover { filter: brightness(1.08); }
@@ -236,6 +240,8 @@
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: all 0.15s ease;
 }
 .btn-danger-outline:hover {
@@ -498,9 +504,10 @@
   padding: 4px 8px 22px 8px;
 }
 .dark-sidebar .brand img {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 8px rgba(255, 83, 118, 0.3));
 }
 .dark-sidebar .brand-text {
   display: flex;

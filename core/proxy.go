@@ -28,6 +28,7 @@ func init() {
 		&plugins.QqPlugin{},
 		&plugins.DouyinPlugin{},
 		&plugins.BilibiliPlugin{},
+		&plugins.KuaishouPlugin{},
 		&plugins.DefaultPlugin{},
 	}
 

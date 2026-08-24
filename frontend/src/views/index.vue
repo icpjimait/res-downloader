@@ -37,10 +37,20 @@
       <div class="flex-1"></div>
 
       <div class="flex items-center gap-3">
-        <!-- Search -->
-        <div class="icon-btn" :style="descriptionSearchValue || urlSearchValue ? 'color: var(--accent);' : ''" @click="showSearchModal = true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        </div>
+        <!-- Search Input -->
+        <NInput
+          v-model:value="searchKeyword"
+          :placeholder="t('index.search_description')"
+          clearable
+          style="width: 210px;"
+        >
+          <template #prefix>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-faint); margin-right: 4px;">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="M21 21l-4.35-4.35"/>
+            </svg>
+          </template>
+        </NInput>
 
         <!-- Clear -->
         <button v-if="!rememberChoice" class="btn-ghost danger" @click="showClearModal = true">
@@ -58,10 +68,12 @@
           {{ t('index.batch_download') }}
         </button>
 
-        <!-- More actions -->
-        <div class="icon-btn" @click="showMoreActionsModal = true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-        </div>
+        <!-- More actions dropdown -->
+        <NDropdown :options="moreOptions" @select="handleMoreSelect" trigger="click" placement="bottom-end">
+          <div class="icon-btn" :title="t('index.more_operation')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          </div>
+        </NDropdown>
       </div>
     </div>
 
@@ -96,26 +108,12 @@
       />
     </div>
 
-    <!-- ══════ FOOTER LINKS ══════ -->
-    <div class="footer-links" id="bottom">
-      <a @click="BrowserOpenURL(certUrl)">{{ t('footer.cert_download') }}</a>
-      <a @click="BrowserOpenURL('https://github.com/putyy/res-downloader')">{{ t('footer.source_code') }}</a>
-      <a @click="BrowserOpenURL('https://github.com/putyy/res-downloader/issues')">{{ t('footer.help') }}</a>
-      <a @click="BrowserOpenURL('https://github.com/putyy/res-downloader/releases')">{{ t('footer.update_log') }}</a>
-    </div>
-
     <Preview v-model:showModal="showPreviewRow" :previewRow="previewRow" @download="handlePreviewDownload"/>
     <ShowLoading :loadingText="loadingText" :isLoading="loading"/>
     <ImportJson v-model:showModal="showImport" @submit="handleImport"/>
     <Password v-model:showModal="showPassword" @submit="handlePassword"/>
 
-    <!-- Search Modal -->
-    <NModal v-model:show="showSearchModal" preset="card" style="width: 400px; --wails-draggable:no-drag; background: var(--bg);" :title="t('index.search')">
-      <div class="flex flex-col gap-4">
-        <NInput v-model:value="descriptionSearchValue" :placeholder="t('index.search_description')" clearable />
-        <NInput v-model:value="urlSearchValue" placeholder="URL / Domain" clearable />
-      </div>
-    </NModal>
+
 
     <!-- Clear Modal -->
     <NModal v-model:show="showClearModal" preset="card" style="width: 400px; --wails-draggable:no-drag; background: var(--bg);" :title="t('index.clear_list')">
@@ -133,28 +131,11 @@
       </template>
     </NModal>
 
-    <!-- More Actions Modal -->
-    <NModal v-model:show="showMoreActionsModal" preset="card" style="width: 320px; --wails-draggable:no-drag; background: var(--bg);" :title="t('index.more_operation')">
-      <div class="flex flex-col gap-2">
-        <button class="btn-ghost w-full justify-start text-[15px] py-2" @click="batchCancel(); showMoreActionsModal = false;">
-          {{ t('index.cancel_down') }}
-        </button>
-        <button class="btn-ghost w-full justify-start text-[15px] py-2" @click="batchExport(); showMoreActionsModal = false;">
-          {{ t('index.batch_export') }}
-        </button>
-        <button class="btn-ghost w-full justify-start text-[15px] py-2" @click="showImport=true; showMoreActionsModal = false;">
-          {{ t('index.batch_import') }}
-        </button>
-        <button class="btn-ghost w-full justify-start text-[15px] py-2" @click="batchExport('url'); showMoreActionsModal = false;">
-          {{ t('index.export_url') }}
-        </button>
-      </div>
-    </NModal>
   </div>
 </template>
 
 <script lang="ts" setup>
-import {NButton, NIcon, NImage, NInput, NSpace, NTooltip, NPopover, NGradientText} from "naive-ui"
+import {NButton, NIcon, NImage, NInput, NSpace, NTooltip, NPopover, NGradientText, NDropdown, type DropdownOption} from "naive-ui"
 import {computed, h, onMounted, onUnmounted, ref, watch} from "vue"
 import type {appType} from "@/types/app"
 import type {DataTableRowKey, ImageRenderToolbarProps, DataTableFilterState, DataTableBaseColumn} from "naive-ui"
@@ -188,6 +169,9 @@ const certUrl = computed(() => {
   return store.baseUrl + "/api/cert"
 })
 const data = ref<any[]>([])
+const searchKeyword = ref("")
+const descriptionSearchValue = ref("")
+
 const filteredData = computed(() => {
   let result = data.value
 
@@ -195,12 +179,18 @@ const filteredData = computed(() => {
     result = result.filter(item => selectedTypes.value.includes(item.Classify))
   }
 
-  if (descriptionSearchValue.value) {
-    result = result.filter(item => item.Description?.toLowerCase().includes(descriptionSearchValue.value.toLowerCase()))
+  if (searchKeyword.value) {
+    const kw = searchKeyword.value.toLowerCase().trim()
+    result = result.filter(item =>
+      (item.Description && item.Description.toLowerCase().includes(kw)) ||
+      (item.Url && item.Url.toLowerCase().includes(kw)) ||
+      (item.Domain && item.Domain.toLowerCase().includes(kw))
+    )
   }
 
-  if (urlSearchValue.value) {
-    result = result.filter(item => item.Url?.toLowerCase().includes(urlSearchValue.value.toLowerCase()) || item.Domain?.toLowerCase().includes(urlSearchValue.value.toLowerCase()))
+  if (descriptionSearchValue.value) {
+    const kw = descriptionSearchValue.value.toLowerCase().trim()
+    result = result.filter(item => item.Description && item.Description.toLowerCase().includes(kw))
   }
 
   return result
@@ -247,8 +237,6 @@ const classify = ref([
   },
 ])
 
-const descriptionSearchValue = ref("")
-const urlSearchValue = ref("")
 const rememberChoice = ref(false)
 const rememberChoiceTmp = ref(false)
 
@@ -544,11 +532,54 @@ const showPreviewRow = ref(false)
 const previewRow = ref<appType.MediaInfo>()
 const loading = ref(false)
 const loadingText = ref("")
-const showSearchModal = ref(false)
 const showClearModal = ref(false)
-const showMoreActionsModal = ref(false)
 const showImport = ref(false)
 const showPassword = ref(false)
+
+const moreOptions = computed<DropdownOption[]>(() => [
+  {
+    label: () => t('index.cancel_down'),
+    key: 'cancel',
+    icon: () => h('svg', { viewBox: '0 0 24 24', width: '15', height: '15', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8' }, [
+      h('circle', { cx: '12', cy: '12', r: '10' }),
+      h('path', { d: 'M15 9l-6 6M9 9l6 6' })
+    ])
+  },
+  {
+    label: () => t('index.batch_export'),
+    key: 'export',
+    icon: () => h('svg', { viewBox: '0 0 24 24', width: '15', height: '15', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8' }, [
+      h('path', { d: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5-5 5 5M12 5v12' })
+    ])
+  },
+  {
+    label: () => t('index.batch_import'),
+    key: 'import',
+    icon: () => h('svg', { viewBox: '0 0 24 24', width: '15', height: '15', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8' }, [
+      h('path', { d: 'M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3' })
+    ])
+  },
+  {
+    label: () => t('index.export_url'),
+    key: 'export_url',
+    icon: () => h('svg', { viewBox: '0 0 24 24', width: '15', height: '15', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8' }, [
+      h('path', { d: 'M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71' }),
+      h('path', { d: 'M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71' })
+    ])
+  }
+])
+
+const handleMoreSelect = (key: string) => {
+  if (key === 'cancel') {
+    batchCancel()
+  } else if (key === 'export') {
+    batchExport()
+  } else if (key === 'import') {
+    showImport.value = true
+  } else if (key === 'export_url') {
+    batchExport('url')
+  }
+}
 const downloadQueue = ref<appType.MediaInfo[]>([])
 const downloadHistory = ref<Record<string, string>>({})
 let activeDownloads = 0
