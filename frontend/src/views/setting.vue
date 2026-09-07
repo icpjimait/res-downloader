@@ -309,6 +309,9 @@ watch(formValue, () => {
   if (typeof formValue.value.Host === 'string') {
     formValue.value.Host = formValue.value.Host.trim()
   }
+  if (typeof formValue.value.UpstreamProxy === 'string') {
+    formValue.value.UpstreamProxy = formValue.value.UpstreamProxy.trim()
+  }
 
   if (formValue.value.Host && !isValidHost(formValue.value.Host)) {
     hostValidationFeedback.value = t("setting.host_format_error")

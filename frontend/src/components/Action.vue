@@ -101,7 +101,7 @@ const props = defineProps<{
 const emits = defineEmits(["action"])
 
 const action = (type: string) => {
-  if (type === 'down' && (props.row.Classify === 'live' || props.row.Classify === 'm3u8')) {
+  if (type === 'down' && props.row.Classify === 'live') {
     window?.$message?.error(t("index.download_no_tip"))
     return
   }

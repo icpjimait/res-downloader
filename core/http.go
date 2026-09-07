@@ -1,8 +1,8 @@
 package core
 
 import (
+	"bufio"
 	"bytes"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,7 +12,9 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"res-downloader/core/shared"
+	"strconv"
 	"strings"
 	"time"
 
@@ -64,7 +66,39 @@ func (h *HttpServer) downCert(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, io.NopCloser(bytes.NewReader(appOnce.PublicCrt)))
 }
 
+func resolveURL(base *url.URL, target string) string {
+	target = strings.TrimSpace(target)
+	if strings.HasPrefix(target, "http://") || strings.HasPrefix(target, "https://") {
+		return target
+	}
+	if base == nil {
+		return target
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		return target
+	}
+	return base.ResolveReference(u).String()
+}
+
 func (h *HttpServer) preview(w http.ResponseWriter, r *http.Request) {
+	// 允许跨域请求与预检
+	origin := r.Header.Get("Origin")
+	if origin != "" {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+	} else {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+	}
+	w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "*")
+	w.Header().Set("Access-Control-Expose-Headers", "Content-Range, Content-Length, Accept-Ranges")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	realURL := r.URL.Query().Get("url")
 	if realURL == "" {
 		http.Error(w, "Missing 'url' parameter", http.StatusBadRequest)
@@ -110,47 +144,135 @@ func (h *HttpServer) preview(w http.ResponseWriter, r *http.Request) {
 		request.Header.Set("Range", rangeHeader)
 	}
 
-	transport := &http.Transport{
-		DisableKeepAlives: false,
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-	}
-	if globalConfig.DownloadProxy && globalConfig.UpstreamProxy != "" && !strings.Contains(globalConfig.UpstreamProxy, globalConfig.Port) {
-		if proxyURL, err := url.Parse(globalConfig.UpstreamProxy); err == nil {
-			transport.Proxy = http.ProxyURL(proxyURL)
-		}
-	}
 	client := &http.Client{
-		Transport: transport,
+		Transport: BuildUpstreamTransport(),
 		Timeout:   60 * time.Second,
 	}
 
 	resp, err := client.Do(request)
 	if err != nil {
-		http.Error(w, "Failed to fetch the resource", http.StatusInternalServerError)
+		http.Error(w, "Failed to fetch the resource: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer resp.Body.Close()
 
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "Range, Origin, Content-Type, Accept")
-	w.Header().Set("Access-Control-Expose-Headers", "Content-Range, Content-Length, Accept-Ranges")
+	reader := bufio.NewReader(resp.Body)
+	peekBytes, _ := reader.Peek(512)
 
+	// A. 检测是否为 M3U8 播放列表
+	isM3U8 := strings.Contains(strings.ToLower(realURL), ".m3u8") ||
+		strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "mpegurl") ||
+		bytes.HasPrefix(bytes.TrimSpace(peekBytes), []byte("#EXTM3U"))
+
+	if isM3U8 {
+		m3u8Data, err := io.ReadAll(reader)
+		if err != nil {
+			http.Error(w, "Failed to read m3u8", http.StatusInternalServerError)
+			return
+		}
+
+		baseHost := "http://127.0.0.1:" + globalConfig.Port
+		if r.Host != "" {
+			scheme := "http"
+			if r.TLS != nil {
+				scheme = "https"
+			}
+			baseHost = scheme + "://" + r.Host
+		}
+		keyPrefix := baseHost + "/api/preview/key.key?url="
+		segPrefix := baseHost + "/api/preview/segment.ts?url="
+		m3u8Prefix := baseHost + "/api/preview/playlist.m3u8?url="
+
+		scanner := bufio.NewScanner(bytes.NewReader(m3u8Data))
+		var rewrittenLines []string
+		reKey := regexp.MustCompile(`URI="([^"]+)"`)
+
+		for scanner.Scan() {
+			line := scanner.Text()
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" {
+				rewrittenLines = append(rewrittenLines, line)
+				continue
+			}
+
+			if strings.HasPrefix(trimmed, "#EXT-X-KEY:") {
+				line = reKey.ReplaceAllStringFunc(line, func(match string) string {
+					sub := reKey.FindStringSubmatch(match)
+					if len(sub) >= 2 {
+						keyURL := resolveURL(parsedURL, sub[1])
+						return fmt.Sprintf(`URI="%s%s"`, keyPrefix, url.QueryEscape(keyURL))
+					}
+					return match
+				})
+				rewrittenLines = append(rewrittenLines, line)
+			} else if strings.HasPrefix(trimmed, "#") {
+				if reKey.MatchString(line) {
+					line = reKey.ReplaceAllStringFunc(line, func(match string) string {
+						sub := reKey.FindStringSubmatch(match)
+						if len(sub) >= 2 {
+							keyURL := resolveURL(parsedURL, sub[1])
+							return fmt.Sprintf(`URI="%s%s"`, keyPrefix, url.QueryEscape(keyURL))
+						}
+						return match
+					})
+				}
+				rewrittenLines = append(rewrittenLines, line)
+			} else {
+				segURL := resolveURL(parsedURL, trimmed)
+				if strings.Contains(strings.ToLower(segURL), ".m3u8") {
+					rewrittenLines = append(rewrittenLines, m3u8Prefix+url.QueryEscape(segURL))
+				} else {
+					rewrittenLines = append(rewrittenLines, segPrefix+url.QueryEscape(segURL))
+				}
+			}
+		}
+
+		output := strings.Join(rewrittenLines, "\n")
+		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl; charset=utf-8")
+		w.Header().Set("Content-Length", strconv.Itoa(len(output)))
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(output))
+		return
+	}
+
+	// B. 检测是否为 AES 加密图片（以 {s}g=- 开头）
+	if bytes.HasPrefix(peekBytes, EncryptedImgPrefix) {
+		allData, err := io.ReadAll(reader)
+		if err == nil {
+			decrypted, isEnc, mimeType, _, decErr := DecryptImageBytes(allData)
+			if isEnc && decErr == nil {
+				w.Header().Set("Content-Type", mimeType)
+				w.Header().Set("Content-Length", strconv.Itoa(len(decrypted)))
+				w.WriteHeader(http.StatusOK)
+				w.Write(decrypted)
+				return
+			}
+		}
+	}
+
+	// C. 常规媒体或分段切片（TS、MP4、加密 Key 等）
 	for k, v := range resp.Header {
 		lk := strings.ToLower(k)
-		if lk == "access-control-allow-origin" || lk == "access-control-allow-headers" {
+		if strings.HasPrefix(lk, "access-control-") {
 			continue
 		}
 		for _, vv := range v {
 			w.Header().Add(k, vv)
 		}
 	}
-	w.WriteHeader(resp.StatusCode)
 
-	_, err = io.Copy(w, resp.Body)
+	// 确保切片和密钥的 Content-Type 能够被 HLS 播放器正确解析
+	if strings.Contains(strings.ToLower(realURL), ".ts") {
+		w.Header().Set("Content-Type", "video/mp2t")
+	} else if strings.Contains(strings.ToLower(realURL), ".key") {
+		w.Header().Set("Content-Type", "application/octet-stream")
+	}
+
+	w.WriteHeader(resp.StatusCode)
+	_, err = io.Copy(w, reader)
 	if err != nil {
 		globalLogger.Warn().Msgf("preview stream write error: %v", err)
 	}
-	return
 }
 
 func (h *HttpServer) send(t string, data interface{}) {

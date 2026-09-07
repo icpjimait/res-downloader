@@ -408,7 +408,7 @@ func (p *KuaishouPlugin) processMediaStream(resp *http.Response, rawUrl string, 
 				return
 			}
 		}
-	} else if classify == "video" || classify == "m3u8" {
+	} else if classify == "video" {
 		if minSize, ok := p.bridge.GetConfig("MinVideoSize").(int); ok && minSize > 0 {
 			if size < float64(minSize*1024) {
 				return

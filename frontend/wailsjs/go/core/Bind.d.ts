@@ -8,4 +8,6 @@ export function Config():Promise<core.ResponseData>;
 
 export function FileExists(arg1:string):Promise<boolean>;
 
+export function GetFileSize(arg1:string):Promise<number>;
+
 export function ResetApp():Promise<void>;

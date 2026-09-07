@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"res-downloader/core/shared"
 	"strconv"
@@ -88,9 +90,13 @@ func (r *Resource) delete(sign string) {
 }
 
 func (r *Resource) cancel(id string) error {
-	if d, ok := r.tasks.Load(id); ok {
-		d.(*FileDownloader).Cancel()
-		r.tasks.Delete(id) // 可选：取消后清理
+	if v, ok := r.tasks.Load(id); ok {
+		if d, ok := v.(*FileDownloader); ok {
+			d.Cancel()
+		} else if cancel, ok := v.(context.CancelFunc); ok {
+			cancel()
+		}
+		r.tasks.Delete(id)
 		return nil
 	}
 	return errors.New("task not found")
@@ -172,6 +178,40 @@ func (r *Resource) download(mediaInfo shared.MediaInfo, decodeStr string) {
 
 		headers, _ := r.parseHeaders(mediaInfo)
 
+		// 检查是否为 M3U8 视频：如果系统存在 ffmpeg，通过内置代理流直接下载并无损合并为标准 MP4
+		isM3U8 := mediaInfo.Classify == "m3u8" || strings.Contains(strings.ToLower(rawUrl), ".m3u8")
+		ffmpegPath := shared.FindFFmpegPath()
+		if isM3U8 && ffmpegPath != "" {
+			r.progressEventsEmit(mediaInfo, "正在下载M3U8视频流...", shared.DownloadStatusRunning)
+			if strings.HasSuffix(strings.ToLower(mediaInfo.SavePath), ".m3u8") || mediaInfo.Suffix == ".m3u8" || mediaInfo.Suffix == "" {
+				mediaInfo.SavePath = strings.TrimSuffix(mediaInfo.SavePath, filepath.Ext(mediaInfo.SavePath)) + ".mp4"
+			}
+			mediaInfo.SavePath = shared.GetUniqueFileName(mediaInfo.SavePath)
+
+			previewURL := fmt.Sprintf("http://127.0.0.1:%s/api/preview/playlist.m3u8?url=%s", globalConfig.Port, url.QueryEscape(rawUrl))
+			ctx, cancel := context.WithCancel(context.Background())
+			r.tasks.Store(mediaInfo.Id, cancel)
+
+			cmd := exec.CommandContext(ctx, ffmpegPath, "-allowed_extensions", "ALL", "-protocol_whitelist", "file,http,https,tcp,tls,crypto", "-y", "-i", previewURL, "-c", "copy", "-bsf:a", "aac_adtstoasc", mediaInfo.SavePath)
+			output, err := cmd.CombinedOutput()
+			r.tasks.Delete(mediaInfo.Id)
+
+			if err != nil {
+				if ctx.Err() != nil {
+					_ = os.Remove(mediaInfo.SavePath)
+					return
+				}
+				globalLogger.Warn().Msgf("ffmpeg m3u8 download error: %v, output: %s", err, string(output))
+				downloader := NewFileDownloader(rawUrl, mediaInfo.SavePath, globalConfig.TaskNumber, headers)
+				_ = downloader.Start()
+			}
+			if fi, err := os.Stat(mediaInfo.SavePath); err == nil {
+				mediaInfo.Size = float64(fi.Size())
+			}
+			r.progressEventsEmit(mediaInfo, "complete", shared.DownloadStatusDone)
+			return
+		}
+
 		downloader := NewFileDownloader(rawUrl, mediaInfo.SavePath, globalConfig.TaskNumber, headers)
 		downloader.progressCallback = func(totalDownloaded, totalSize float64, taskID int, taskProgress float64) {
 			r.progressEventsEmit(mediaInfo, strconv.Itoa(int(totalDownloaded*100/totalSize))+"%", shared.DownloadStatusRunning)
@@ -215,6 +255,14 @@ func (r *Resource) download(mediaInfo shared.MediaInfo, decodeStr string) {
 				r.progressEventsEmit(mediaInfo, "decryption error: "+err.Error())
 				return
 			}
+		} else {
+			// 自动解密内置 AES 加密图片（例如 51cg1 等站点的图片）
+			if newPath, err := DecryptFileOnDisk(mediaInfo.SavePath); err == nil && newPath != "" {
+				mediaInfo.SavePath = newPath
+			}
+		}
+		if fi, err := os.Stat(mediaInfo.SavePath); err == nil {
+			mediaInfo.Size = float64(fi.Size())
 		}
 		r.progressEventsEmit(mediaInfo, "complete", shared.DownloadStatusDone)
 	}(mediaInfo)
@@ -280,6 +328,7 @@ func (r *Resource) progressEventsEmit(mediaInfo shared.MediaInfo, args ...string
 		"Status":   Status,
 		"SavePath": mediaInfo.SavePath,
 		"Message":  Message,
+		"Size":     mediaInfo.Size,
 	})
 	return
 }

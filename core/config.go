@@ -186,6 +186,7 @@ func getDefaultMimeMap() map[string]MimeInfo {
 		"application/vnd.openxmlformats-officedocument.wordprocessingml.document": {Type: "doc", Suffix: ".docx"},
 		"font/woff":                {Type: "font", Suffix: ".woff"},
 		"application/octet-stream": {Type: "stream", Suffix: "default"},
+		"binary/octet-stream":      {Type: "stream", Suffix: "default"},
 	}
 }
 
@@ -227,7 +228,7 @@ func (c *Config) setConfig(config Config) {
 	c.SaveDirectory = config.SaveDirectory
 	c.FilenameLen = config.FilenameLen
 	c.FilenameTime = config.FilenameTime
-	c.UpstreamProxy = config.UpstreamProxy
+	c.UpstreamProxy = strings.TrimSpace(config.UpstreamProxy)
 	c.UserAgent = config.UserAgent
 	c.OpenProxy = config.OpenProxy
 	c.DownloadProxy = config.DownloadProxy

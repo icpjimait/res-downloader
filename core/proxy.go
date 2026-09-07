@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/elazarl/goproxy"
+	"golang.org/x/net/proxy"
 )
 
 type Proxy struct {
@@ -56,6 +57,12 @@ func init() {
 		},
 		IsProxy: func() bool {
 			return appOnce != nil && appOnce.IsProxy
+		},
+		RecordHtmlTitle: func(resp *http.Response) {
+			RecordHtmlTitle(resp)
+		},
+		GetTitle: func(req *http.Request) string {
+			return GetTitleForMediaRequest(req)
 		},
 	}
 
@@ -114,13 +121,45 @@ func (p *Proxy) setCa() error {
 	return nil
 }
 
+func BuildUpstreamTransport() *http.Transport {
+	upstream := strings.TrimSpace(globalConfig.UpstreamProxy)
+	transport := &http.Transport{
+		DisableKeepAlives: false,
+		DialContext: (&net.Dialer{
+			Timeout: 60 * time.Second,
+		}).DialContext,
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
+		TLSHandshakeTimeout:   60 * time.Second,
+		ResponseHeaderTimeout: 60 * time.Second,
+		IdleConnTimeout:       30 * time.Second,
+	}
+
+	if upstream != "" && globalConfig.DownloadProxy && !strings.Contains(upstream, globalConfig.Port) {
+		proxyURL, err := url.Parse(upstream)
+		if err == nil {
+			transport.Proxy = http.ProxyURL(proxyURL)
+			if proxyURL.Scheme == "socks5" || proxyURL.Scheme == "socks5h" {
+				dialer, dialErr := proxy.FromURL(proxyURL, proxy.Direct)
+				if dialErr == nil {
+					transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+						return dialer.Dial(network, addr)
+					}
+				}
+			}
+		}
+	}
+	return transport
+}
+
 func (p *Proxy) setTransport() {
+	upstream := strings.TrimSpace(globalConfig.UpstreamProxy)
 	transport := &http.Transport{
 		DisableKeepAlives: false,
 		// MaxIdleConnsPerHost: 10,
 		DialContext: (&net.Dialer{
 			Timeout: 60 * time.Second,
 		}).DialContext,
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 		TLSHandshakeTimeout:   60 * time.Second,
 		ResponseHeaderTimeout: 60 * time.Second,
 		IdleConnTimeout:       30 * time.Second,
@@ -129,11 +168,23 @@ func (p *Proxy) setTransport() {
 	p.Proxy.ConnectDial = nil
 	p.Proxy.ConnectDialWithReq = nil
 
-	if globalConfig.UpstreamProxy != "" && globalConfig.OpenProxy && !strings.Contains(globalConfig.UpstreamProxy, globalConfig.Port) {
-		proxyURL, err := url.Parse(globalConfig.UpstreamProxy)
+	if upstream != "" && globalConfig.OpenProxy && !strings.Contains(upstream, globalConfig.Port) {
+		proxyURL, err := url.Parse(upstream)
 		if err == nil {
 			transport.Proxy = http.ProxyURL(proxyURL)
-			p.Proxy.ConnectDial = p.Proxy.NewConnectDialToProxy(globalConfig.UpstreamProxy)
+			if proxyURL.Scheme == "socks5" || proxyURL.Scheme == "socks5h" {
+				dialer, dialErr := proxy.FromURL(proxyURL, proxy.Direct)
+				if dialErr == nil {
+					transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+						return dialer.Dial(network, addr)
+					}
+					p.Proxy.ConnectDial = func(network, addr string) (net.Conn, error) {
+						return dialer.Dial(network, addr)
+					}
+				}
+			} else {
+				p.Proxy.ConnectDial = p.Proxy.NewConnectDialToProxy(upstream)
+			}
 		}
 	}
 	p.Proxy.Tr = transport

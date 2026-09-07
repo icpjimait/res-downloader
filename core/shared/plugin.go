@@ -11,9 +11,11 @@ type Bridge struct {
 	TypeSuffix    func(mime string) (string, string)
 	MediaIsMarked func(key string) bool
 	MarkMedia     func(key string)
-	GetConfig     func(key string) interface{}
-	Send          func(t string, data interface{})
-	IsProxy       func() bool
+	GetConfig       func(key string) interface{}
+	Send            func(t string, data interface{})
+	IsProxy         func() bool
+	RecordHtmlTitle func(resp *http.Response)
+	GetTitle        func(req *http.Request) string
 }
 
 type Plugin interface {

@@ -306,13 +306,17 @@ const columns = ref<any[]>([
     width: 70,
     render: (row: appType.MediaInfo) => {
       if (row.Classify === "image") {
+        let imgSrc = row.Url
+        if (window?.$baseUrl) {
+          imgSrc = window.$baseUrl + "/api/preview?url=" + encodeURIComponent(row.Url)
+        }
         return h("div", {
           style: "width: 100%;max-height:80px;overflow:hidden;"
         }, h(NImage, {
           objectFit: "contain",
           lazy: true,
           "render-toolbar": renderToolbar,
-          src: row.Url
+          src: imgSrc
         }))
       }
       if (row.Classify === "audio" || row.Classify === "video" || row.Classify === "m3u8" || row.Classify === "live") {
@@ -430,31 +434,45 @@ const columns = ref<any[]>([
     maxWidth: 800,
     resizable: true,
     render: (row: appType.MediaInfo) => {
-      const text = row.Description || "—"
-      if (!row.Description) {
-        return h('span', {style: 'color: var(--text-faint); font-size: 12px;'}, '—')
-      }
-      return h(NTooltip, {
-        trigger: 'hover',
-        placement: 'top',
-        interactive: true
-      }, {
-        trigger: () => h('span', {
-          style: 'color: var(--text); font-size: 12px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default;'
-        }, text),
-        default: () => h('div', {
-          style: 'max-width: 450px; font-size: 12px; word-break: break-all; line-height: 1.5;'
-        }, text)
+      return h(ShowOrEdit, {
+        value: row.Description || '',
+        onUpdateValue: (val: string) => {
+          row.Description = val
+          cacheData()
+        }
       })
     }
   },
   {
     title: computed(() => t("index.resource_size")),
     key: "Size",
-    width: 100,
-    sorter: (row1: appType.MediaInfo, row2: appType.MediaInfo) => row1.Size - row2.Size,
+    width: 105,
+    sorter: (row1: appType.MediaInfo, row2: appType.MediaInfo) => (row1.Size || 0) - (row2.Size || 0),
     render(row: appType.MediaInfo) {
-      return h('span', {class: 'mono', style: 'color: var(--text-dim); font-size: 12px;'}, formatSize(row.Size))
+      if (row.Size && row.Size > 0) {
+        return h('span', {class: 'mono', style: 'color: var(--text-dim); font-size: 12px;'}, formatSize(row.Size))
+      }
+      if (row.Status === 'done' && row.SavePath) {
+        if (!(row as any)._fetchingSize && bind && typeof bind.GetFileSize === 'function') {
+          (row as any)._fetchingSize = true
+          bind.GetFileSize(row.SavePath).then((sz: number) => {
+            if (sz > 0) {
+              row.Size = sz
+              cacheData()
+            }
+          }).catch(() => {}).finally(() => {
+            delete (row as any)._fetchingSize
+          })
+        }
+        return h('span', {class: 'mono', style: 'color: var(--text-faint); font-size: 12px;'}, '—')
+      }
+      if (row.Status === 'running') {
+        return h('span', {style: 'color: var(--primary); font-size: 12px;'}, '下载中...')
+      }
+      if (row.Classify === 'm3u8' || row.Classify === 'live') {
+        return h('span', {style: 'color: var(--text-faint); font-size: 12px;'}, '流媒体')
+      }
+      return h('span', {class: 'mono', style: 'color: var(--text-faint); font-size: 12px;'}, '—')
     }
   },
   {
@@ -617,6 +635,21 @@ onMounted(() => {
     try { downloadHistory.value = JSON.parse(historyStr) } catch (e) {}
   }
 
+  const syncExistingSizes = () => {
+    data.value.forEach((item) => {
+      if (item.Status === "done" && item.SavePath && (!item.Size || item.Size <= 0)) {
+        if (bind && typeof bind.GetFileSize === 'function') {
+          bind.GetFileSize(item.SavePath).then((sz: number) => {
+            if (sz > 0) {
+              item.Size = sz
+              cacheData()
+            }
+          }).catch(() => {})
+        }
+      }
+    })
+  }
+
   const mediaData = localStorage.getItem("mediaData")
   if (mediaData) {
     data.value = JSON.parse(mediaData)
@@ -629,7 +662,10 @@ onMounted(() => {
         }
       }
     })
+    syncExistingSizes()
   }
+  syncExistingSizes()
+  setTimeout(syncExistingSizes, 1000)
 
   try {
     window.addEventListener("resize", () => {
@@ -700,6 +736,14 @@ onMounted(() => {
         if (bind && typeof bind.FileExists === 'function') {
           bind.FileExists(res.SavePath).then((exists: boolean) => {
             res.FileMissing = !exists
+            if (exists && bind && typeof bind.GetFileSize === 'function') {
+              bind.GetFileSize(res.SavePath).then((sz: number) => {
+                if (sz > 0) {
+                  res.Size = sz
+                  cacheData()
+                }
+              }).catch(() => {})
+            }
           }).catch(() => {})
         }
       }
@@ -723,7 +767,7 @@ onMounted(() => {
 
   eventStore.addHandle({
     type: "downloadProgress",
-    event: (res: { Id: string, SavePath: string, Status: string, Message: string }) => {
+    event: (res: { Id: string, SavePath: string, Status: string, Message: string, Size?: number }) => {
       switch (res.Status) {
         case "running":
           updateItem(res.Id, item => {
@@ -736,6 +780,16 @@ onMounted(() => {
             item.SavePath = res.SavePath
             item.Status = 'done'
             item.FileMissing = false
+            if (res.Size && res.Size > 0) {
+              item.Size = res.Size
+            } else if (item.SavePath && bind && typeof bind.GetFileSize === 'function') {
+              bind.GetFileSize(item.SavePath).then((sz: number) => {
+                if (sz > 0) {
+                  item.Size = sz
+                  cacheData()
+                }
+              }).catch(() => {})
+            }
             if (item.UrlSign && res.SavePath) {
               downloadHistory.value[item.UrlSign] = res.SavePath
               localStorage.setItem("downloadHistory", JSON.stringify(downloadHistory.value))
@@ -919,7 +973,7 @@ const batchDown = async () => {
     return
   }
   data.value.forEach((item, index) => {
-    if (checkedRowKeysValue.value.includes(item.Id) && item.Classify !== 'live' && item.Classify !== 'm3u8') {
+    if (checkedRowKeysValue.value.includes(item.Id) && item.Classify !== 'live') {
       download(item, index)
     }
   })
@@ -1001,7 +1055,7 @@ const uint8ArrayToBase64 = (bytes: any) => {
 }
 
 const handlePreviewDownload = (row: appType.MediaInfo) => {
-  if (row.Classify === 'live' || row.Classify === 'm3u8') {
+  if (row.Classify === 'live') {
     window?.$message?.error(t("index.download_no_tip"))
     return
   }

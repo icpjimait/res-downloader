@@ -30,11 +30,16 @@ export const isValidPort = (port: number) => {
 
 export const formatSize = (size: number | string) => {
     if (typeof size === "string") return size
-    if (size > 1048576) {
-        return (size / 1048576).toFixed(2) + 'MB';
+    if (!size || size <= 0 || isNaN(Number(size))) return '—'
+    const num = Number(size)
+    if (num >= 1073741824) {
+        return (num / 1073741824).toFixed(2) + ' GB';
     }
-    if (size > 1024) {
-        return (size / 1024).toFixed(2) + 'KB';
+    if (num >= 1048576) {
+        return (num / 1048576).toFixed(2) + ' MB';
     }
-    return Math.floor(size) + 'b';
+    if (num >= 1024) {
+        return (num / 1024).toFixed(2) + ' KB';
+    }
+    return Math.floor(num) + ' B';
 }

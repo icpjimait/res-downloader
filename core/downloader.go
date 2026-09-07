@@ -71,10 +71,9 @@ func NewFileDownloader(url, filename string, totalTasks int, headers map[string]
 }
 
 func (fd *FileDownloader) buildClient() *http.Client {
-	transport := &http.Transport{
-		MaxIdleConnsPerHost: 100,
-		IdleConnTimeout:     90 * time.Second,
-	}
+	transport := BuildUpstreamTransport()
+	transport.MaxIdleConnsPerHost = 100
+	transport.IdleConnTimeout = 90 * time.Second
 	if fd.ProxyUrl != nil {
 		transport.Proxy = http.ProxyURL(fd.ProxyUrl)
 	}

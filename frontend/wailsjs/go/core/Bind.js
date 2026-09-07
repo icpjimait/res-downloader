@@ -14,6 +14,10 @@ export function FileExists(arg1) {
   return window['go']['core']['Bind']['FileExists'](arg1);
 }
 
+export function GetFileSize(arg1) {
+  return window['go']['core']['Bind']['GetFileSize'](arg1);
+}
+
 export function ResetApp() {
   return window['go']['core']['Bind']['ResetApp']();
 }

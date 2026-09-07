@@ -246,14 +246,17 @@ const setupVideoJsPlayer = () => {
   }
 
   let mediaType = props.previewRow.ContentType || "video/mp4"
-  if (mediaType === "application/octet-stream" || mediaType === "video/tos" || mediaType === "binary/octet-stream" || props.previewRow.Classify === "video") {
+  let previewSrc = window?.$baseUrl + "/api/preview?url=" + encodeURIComponent(props.previewRow.Url)
+  if (props.previewRow.Classify === "m3u8" || props.previewRow.Suffix === ".m3u8" || (props.previewRow.Url && props.previewRow.Url.includes(".m3u8"))) {
+    mediaType = "application/x-mpegURL"
+    previewSrc = window?.$baseUrl + "/api/preview/playlist.m3u8?url=" + encodeURIComponent(props.previewRow.Url)
+  } else if (mediaType === "application/octet-stream" || mediaType === "video/tos" || mediaType === "binary/octet-stream" || props.previewRow.Classify === "video") {
     mediaType = "video/mp4"
   }
 
   player.src({
-    src: window?.$baseUrl + "/api/preview?url=" + encodeURIComponent(props.previewRow.Url),
+    src: previewSrc,
     type: mediaType,
-    withCredentials: true,
   })
   player.play()
 }

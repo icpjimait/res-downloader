@@ -25,13 +25,15 @@ func HandleApi(w http.ResponseWriter, r *http.Request) bool {
 			w.WriteHeader(http.StatusNoContent)
 			return true
 		}
+		if strings.HasPrefix(r.URL.Path, "/api/preview") {
+			httpServerOnce.preview(w, r)
+			return true
+		}
 		switch r.URL.Path {
 		case "/api/install":
 			httpServerOnce.install(w, r)
 		case "/api/set-system-password":
 			httpServerOnce.setSystemPassword(w, r)
-		case "/api/preview":
-			httpServerOnce.preview(w, r)
 		case "/api/proxy-open":
 			httpServerOnce.openSystemProxy(w, r)
 		case "/api/proxy-unset":

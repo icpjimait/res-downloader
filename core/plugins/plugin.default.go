@@ -37,6 +37,15 @@ func (p *DefaultPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *
 	}
 
 	contentType := resp.Header.Get("Content-Type")
+
+	// 若为 HTML 网页响应，提取并记录文章/页面标题，供后续嗅探到的媒体项作为默认描述
+	if strings.Contains(strings.ToLower(contentType), "text/html") && (resp.StatusCode == 200 || resp.StatusCode == 206) {
+		if p.bridge.RecordHtmlTitle != nil {
+			p.bridge.RecordHtmlTitle(resp)
+		}
+		return resp
+	}
+
 	classify, suffix := p.bridge.TypeSuffix(contentType)
 
 	rawUrl := resp.Request.URL.String()
@@ -86,6 +95,18 @@ func (p *DefaultPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *
 		} else if strings.HasSuffix(cleanPath, ".mp3") || strings.HasSuffix(cleanPath, ".m4a") {
 			classify = "audio"
 			suffix = ".mp3"
+		} else if strings.HasSuffix(cleanPath, ".jpg") || strings.HasSuffix(cleanPath, ".jpeg") {
+			classify = "image"
+			suffix = ".jpg"
+		} else if strings.HasSuffix(cleanPath, ".png") {
+			classify = "image"
+			suffix = ".png"
+		} else if strings.HasSuffix(cleanPath, ".gif") {
+			classify = "image"
+			suffix = ".gif"
+		} else if strings.HasSuffix(cleanPath, ".webp") {
+			classify = "image"
+			suffix = ".webp"
 		}
 	}
 
@@ -131,7 +152,7 @@ func (p *DefaultPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *
 					return resp
 				}
 			}
-		} else if classify == "video" || classify == "m3u8" {
+		} else if classify == "video" {
 			if minSize, ok := p.bridge.GetConfig("MinVideoSize").(int); ok && minSize > 0 {
 				if value < float64(minSize*1024) {
 					return resp
@@ -155,7 +176,12 @@ func (p *DefaultPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *
 			SavePath:    "",
 			DecodeKey:   "",
 			OtherData:   map[string]string{},
-			Description: "",
+			Description: func() string {
+				if p.bridge.GetTitle != nil {
+					return p.bridge.GetTitle(resp.Request)
+				}
+				return ""
+			}(),
 			ContentType: contentType,
 		}
 

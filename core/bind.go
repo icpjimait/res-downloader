@@ -32,3 +32,15 @@ func (b *Bind) FileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
+
+func (b *Bind) GetFileSize(path string) int64 {
+	if path == "" {
+		return 0
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+	return fi.Size()
+}
+
