@@ -137,6 +137,8 @@
     "min_image_size_tip": "Filter out image resources smaller than this value (0 for no limit, unit: KB)",
     "min_video_size": "Video Size Filter",
     "min_video_size_tip": "Filter out video resources smaller than this value (0 for no limit, unit: KB)",
+    "show_h265": "Show [H.265] Video Stream",
+    "show_h265_tip": "Whether to sniff and display H.265/HEVC encoded streams (when off, only universally compatible H.264 streams are kept)",
     "port_format_error": "port format error",
     "host_format_error": "host format error",
     "basic_setting": "Basic Setting",

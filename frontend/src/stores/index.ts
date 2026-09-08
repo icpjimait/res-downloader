@@ -36,7 +36,8 @@ export const useIndexStore = defineStore("index-store", () => {
         MimeMap: {},
         Rule: "*",
         MinImageSize: 0,
-        MinVideoSize: 0
+        MinVideoSize: 0,
+        ShowH265: true
     })
 
     const envInfo = ref({

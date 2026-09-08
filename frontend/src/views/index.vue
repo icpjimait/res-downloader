@@ -193,6 +193,14 @@ const filteredData = computed(() => {
     result = result.filter(item => item.Description && item.Description.toLowerCase().includes(kw))
   }
 
+  if (store.globalConfig.ShowH265 === false) {
+    result = result.filter(item => {
+      const isH265 = (item.Description && item.Description.includes("[H.265]")) ||
+                     (item.Url && (item.Url.includes("/m3m/") || item.Url.toLowerCase().includes("h265") || item.Url.toLowerCase().includes("hevc")))
+      return !isH265
+    })
+  }
+
   return result
 })
 

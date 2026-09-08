@@ -2,12 +2,15 @@ package plugins
 
 import (
 	"bytes"
+	"compress/flate"
+	"compress/gzip"
+	"compress/zlib"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"path/filepath"
+	"path"
 	"regexp"
 	"res-downloader/core/shared"
 	"strconv"
@@ -28,13 +31,13 @@ type KsMeta struct {
 
 type KuaishouPlugin struct {
 	bridge    *shared.Bridge
-	metaCache sync.Map // key (url / cleanUrl / photoId / filename) -> KsMeta
+	metaCache sync.Map // key (url / cleanUrl / photoId / filename / path) -> KsMeta
 }
 
 var (
-	ksPhotoIdRegex  = regexp.MustCompile(`(?:short-video|photo|fw/photo)/([a-zA-Z0-9_-]+)`)
-	ksApolloRegex   = regexp.MustCompile(`window\.__APOLLO_STATE__\s*=\s*(\{.+?\});`)
-	ksNextDataRegex = regexp.MustCompile(`<script\s+id="__NEXT_DATA__"[^>]*>(\{.+?\})</script>`)
+	ksPhotoIdRegex   = regexp.MustCompile(`(?:short-video|photo|fw/photo|new-reco|f)/([a-zA-Z0-9_-]+)`)
+	ksApolloRegex    = regexp.MustCompile(`window\.__APOLLO_STATE__\s*=\s*(\{.+?\});`)
+	ksNextDataRegex  = regexp.MustCompile(`<script\s+id="__NEXT_DATA__"[^>]*>(\{.+?\})</script>`)
 	ksInitStateRegex = regexp.MustCompile(`window\.INIT_STATE\s*=\s*(\{.+?\});`)
 )
 
@@ -54,10 +57,29 @@ func (p *KuaishouPlugin) Domains() []string {
 		"kwai.com",
 		"kwaicdn.com",
 		"kuaishoupay.com",
+		"oskwai.com",
+		"kwai.net",
+		"kwaixiaodian.com",
+		"ks-cdn.com",
+		"chenzhongtech.com",
+		"kwaizt.com",
+		"aikan-tv.com",
+		"kuaishou.cn",
+		"kwai.cn",
 	}
 }
 
 func (p *KuaishouPlugin) OnRequest(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+	lowerUrl := strings.ToLower(r.URL.String())
+	host := strings.ToLower(r.Host)
+	if strings.Contains(lowerUrl, "/graphql") ||
+		strings.Contains(lowerUrl, "/rest/") ||
+		strings.Contains(host, "kuaishou.com") ||
+		strings.Contains(host, "gifshow.com") ||
+		strings.Contains(host, "ksapisrv.com") {
+		// 避免浏览器与快手服务端协商 Brotli (br) 或 zstd 压缩，强制使用 gzip 或 deflate，确保代理端能准确解包 JSON / HTML 提取作品真实标题标签
+		r.Header.Set("Accept-Encoding", "gzip, deflate")
+	}
 	return r, nil
 }
 
@@ -84,7 +106,8 @@ func (p *KuaishouPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) 
 		body, err := io.ReadAll(resp.Body)
 		if err == nil {
 			resp.Body = io.NopCloser(bytes.NewBuffer(body))
-			go p.extractKuaishouJson(body)
+			encoding := resp.Header.Get("Content-Encoding")
+			go p.extractKuaishouJson(body, encoding)
 		}
 		return resp
 	}
@@ -94,7 +117,8 @@ func (p *KuaishouPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) 
 		body, err := io.ReadAll(resp.Body)
 		if err == nil {
 			resp.Body = io.NopCloser(bytes.NewBuffer(body))
-			go p.extractKuaishouHtml(body)
+			encoding := resp.Header.Get("Content-Encoding")
+			go p.extractKuaishouHtml(body, encoding)
 		}
 		return resp
 	}
@@ -103,7 +127,7 @@ func (p *KuaishouPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) 
 	classify, suffix := p.bridge.TypeSuffix(contentType)
 	if classify == "" || classify == "stream" {
 		lowerPath := strings.ToLower(resp.Request.URL.Path)
-		if strings.HasSuffix(lowerPath, ".mp4") || strings.Contains(lowerPath, "/upic/") || strings.Contains(lowerPath, "/bs2/gslb/") {
+		if strings.HasSuffix(lowerPath, ".mp4") || strings.Contains(lowerPath, ".mp4") || strings.Contains(lowerPath, "/upic/") || strings.Contains(lowerPath, "/bs2/gslb/") || strings.Contains(contentType, "video") {
 			classify = "video"
 			suffix = ".mp4"
 		} else if strings.HasSuffix(lowerPath, ".jpg") || strings.HasSuffix(lowerPath, ".jpeg") {
@@ -115,7 +139,7 @@ func (p *KuaishouPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) 
 		} else if strings.HasSuffix(lowerPath, ".webp") {
 			classify = "image"
 			suffix = ".webp"
-		} else if strings.HasSuffix(lowerPath, ".m3u8") {
+		} else if strings.HasSuffix(lowerPath, ".m3u8") || strings.Contains(lowerPath, ".m3u8") {
 			classify = "m3u8"
 			suffix = ".m3u8"
 		} else if strings.HasSuffix(lowerPath, ".flv") {
@@ -138,31 +162,70 @@ func (p *KuaishouPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) 
 	return resp
 }
 
-func (p *KuaishouPlugin) extractKuaishouJson(body []byte) {
+// decompressBody 自动识别并解压 gzip / zlib / deflate 压缩的响应内容
+func decompressBody(body []byte, encoding string) []byte {
+	if len(body) == 0 {
+		return body
+	}
+
+	encoding = strings.ToLower(strings.TrimSpace(encoding))
+	// 检查 gzip 魔数 (0x1f, 0x8b) 或 Content-Encoding: gzip
+	if (len(body) >= 2 && body[0] == 0x1f && body[1] == 0x8b) || strings.Contains(encoding, "gzip") {
+		gr, err := gzip.NewReader(bytes.NewReader(body))
+		if err == nil {
+			defer gr.Close()
+			if data, err := io.ReadAll(gr); err == nil {
+				return data
+			}
+		}
+	}
+
+	// 检查 zlib / deflate 魔数 (0x78) 或 Content-Encoding: deflate
+	if (len(body) >= 2 && body[0] == 0x78) || strings.Contains(encoding, "deflate") {
+		zr, err := zlib.NewReader(bytes.NewReader(body))
+		if err == nil {
+			defer zr.Close()
+			if data, err := io.ReadAll(zr); err == nil {
+				return data
+			}
+		}
+		fr := flate.NewReader(bytes.NewReader(body))
+		defer fr.Close()
+		if data, err := io.ReadAll(fr); err == nil {
+			return data
+		}
+	}
+
+	return body
+}
+
+func (p *KuaishouPlugin) extractKuaishouJson(body []byte, encoding string) {
+	decompressed := decompressBody(body, encoding)
 	var root interface{}
-	if err := json.Unmarshal(body, &root); err != nil {
+	if err := json.Unmarshal(decompressed, &root); err != nil {
 		return
 	}
 	p.findPhotosRecursively(root)
 }
 
-func (p *KuaishouPlugin) extractKuaishouHtml(body []byte) {
+func (p *KuaishouPlugin) extractKuaishouHtml(body []byte, encoding string) {
+	decompressed := decompressBody(body, encoding)
 	// 尝试匹配 __APOLLO_STATE__
-	if match := ksApolloRegex.FindSubmatch(body); len(match) > 1 {
+	if match := ksApolloRegex.FindSubmatch(decompressed); len(match) > 1 {
 		var apollo map[string]interface{}
 		if err := json.Unmarshal(match[1], &apollo); err == nil {
 			p.findPhotosRecursively(apollo)
 		}
 	}
 	// 尝试匹配 __NEXT_DATA__
-	if match := ksNextDataRegex.FindSubmatch(body); len(match) > 1 {
+	if match := ksNextDataRegex.FindSubmatch(decompressed); len(match) > 1 {
 		var nextData map[string]interface{}
 		if err := json.Unmarshal(match[1], &nextData); err == nil {
 			p.findPhotosRecursively(nextData)
 		}
 	}
 	// 尝试匹配 INIT_STATE
-	if match := ksInitStateRegex.FindSubmatch(body); len(match) > 1 {
+	if match := ksInitStateRegex.FindSubmatch(decompressed); len(match) > 1 {
 		var initState map[string]interface{}
 		if err := json.Unmarshal(match[1], &initState); err == nil {
 			p.findPhotosRecursively(initState)
@@ -210,6 +273,12 @@ func (p *KuaishouPlugin) processPhotoItem(photo map[string]interface{}) {
 	if caption == "" {
 		caption, _ = photo["desc"].(string)
 	}
+	if caption == "" {
+		caption, _ = photo["name"].(string)
+	}
+	if caption == "" {
+		caption, _ = photo["text"].(string)
+	}
 	caption = strings.TrimSpace(caption)
 
 	userName, _ := photo["userName"].(string)
@@ -233,65 +302,86 @@ func (p *KuaishouPlugin) processPhotoItem(photo map[string]interface{}) {
 		photoId = fmt.Sprintf("%v", idVal)
 	}
 
-	// 提取封面地址
+	// 提取封面地址（收集所有候选封面，全面建立索引）
 	var coverUrl string
+	var allCoverUrls []string
 	if c, ok := photo["coverUrl"].(string); ok && c != "" {
 		coverUrl = c
-	} else if urls, ok := photo["coverUrls"].([]interface{}); ok && len(urls) > 0 {
-		if uMap, ok := urls[0].(map[string]interface{}); ok {
-			coverUrl, _ = uMap["url"].(string)
-		} else if uStr, ok := urls[0].(string); ok {
-			coverUrl = uStr
+		allCoverUrls = append(allCoverUrls, c)
+	}
+	if urls, ok := photo["coverUrls"].([]interface{}); ok && len(urls) > 0 {
+		for _, uItem := range urls {
+			if uMap, ok := uItem.(map[string]interface{}); ok {
+				if u, ok := uMap["url"].(string); ok && u != "" {
+					if coverUrl == "" {
+						coverUrl = u
+					}
+					allCoverUrls = append(allCoverUrls, u)
+				}
+			} else if uStr, ok := uItem.(string); ok && uStr != "" {
+				if coverUrl == "" {
+					coverUrl = uStr
+				}
+				allCoverUrls = append(allCoverUrls, uStr)
+			}
 		}
 	}
 
-	// 提取播放地址
-	var playUrl string
+	// 提取所有候选播放地址（收集全部 CDN 线路，支持主节点、备用节点、h265 节点）
+	var allPlayUrls []string
 
-	// 1. 直接取 photoUrl
+	// 1. photoUrl
 	if pUrl, ok := photo["photoUrl"].(string); ok && pUrl != "" && strings.HasPrefix(pUrl, "http") {
-		playUrl = pUrl
+		allPlayUrls = append(allPlayUrls, pUrl)
 	}
 
-	// 2. 取 photoUrls 列表
-	if playUrl == "" {
-		if urls, ok := photo["photoUrls"].([]interface{}); ok && len(urls) > 0 {
-			for _, uItem := range urls {
-				if uMap, ok := uItem.(map[string]interface{}); ok {
-					if u, ok := uMap["url"].(string); ok && strings.HasPrefix(u, "http") {
-						playUrl = u
-						break
-					}
-				} else if uStr, ok := uItem.(string); ok && strings.HasPrefix(uStr, "http") {
-					playUrl = uStr
-					break
+	// 2. photoUrls 列表
+	if urls, ok := photo["photoUrls"].([]interface{}); ok && len(urls) > 0 {
+		for _, uItem := range urls {
+			if uMap, ok := uItem.(map[string]interface{}); ok {
+				if u, ok := uMap["url"].(string); ok && strings.HasPrefix(u, "http") {
+					allPlayUrls = append(allPlayUrls, u)
 				}
+			} else if uStr, ok := uItem.(string); ok && strings.HasPrefix(uStr, "http") {
+				allPlayUrls = append(allPlayUrls, uStr)
 			}
 		}
 	}
 
-	// 3. 取 mainMvUrls 列表
-	if playUrl == "" {
-		if urls, ok := photo["mainMvUrls"].([]interface{}); ok && len(urls) > 0 {
-			for _, uItem := range urls {
-				if uMap, ok := uItem.(map[string]interface{}); ok {
-					if u, ok := uMap["url"].(string); ok && strings.HasPrefix(u, "http") {
-						playUrl = u
-						break
-					}
-				} else if uStr, ok := uItem.(string); ok && strings.HasPrefix(uStr, "http") {
-					playUrl = uStr
-					break
+	// 3. mainMvUrls 列表
+	if urls, ok := photo["mainMvUrls"].([]interface{}); ok && len(urls) > 0 {
+		for _, uItem := range urls {
+			if uMap, ok := uItem.(map[string]interface{}); ok {
+				if u, ok := uMap["url"].(string); ok && strings.HasPrefix(u, "http") {
+					allPlayUrls = append(allPlayUrls, u)
 				}
+			} else if uStr, ok := uItem.(string); ok && strings.HasPrefix(uStr, "http") {
+				allPlayUrls = append(allPlayUrls, uStr)
 			}
 		}
 	}
 
-	// 4. 取 h265PhotoUrl
-	if playUrl == "" {
-		if h265, ok := photo["h265PhotoUrl"].(string); ok && strings.HasPrefix(h265, "http") {
-			playUrl = h265
+	// 4. h265PhotoUrl
+	if h265, ok := photo["h265PhotoUrl"].(string); ok && strings.HasPrefix(h265, "http") {
+		allPlayUrls = append(allPlayUrls, h265)
+	}
+
+	// 5. h265PhotoUrls 列表
+	if urls, ok := photo["h265PhotoUrls"].([]interface{}); ok && len(urls) > 0 {
+		for _, uItem := range urls {
+			if uMap, ok := uItem.(map[string]interface{}); ok {
+				if u, ok := uMap["url"].(string); ok && strings.HasPrefix(u, "http") {
+					allPlayUrls = append(allPlayUrls, u)
+				}
+			} else if uStr, ok := uItem.(string); ok && strings.HasPrefix(uStr, "http") {
+				allPlayUrls = append(allPlayUrls, uStr)
+			}
 		}
+	}
+
+	var playUrl string
+	if len(allPlayUrls) > 0 {
+		playUrl = allPlayUrls[0]
 	}
 
 	// 格式化描述（若标题为空则采用作者名）
@@ -315,11 +405,11 @@ func (p *KuaishouPlugin) processPhotoItem(photo map[string]interface{}) {
 	if photoId != "" {
 		p.metaCache.Store("id:"+photoId, meta)
 	}
-	if playUrl != "" {
-		p.cacheMetaByUrl(playUrl, meta)
+	for _, u := range allPlayUrls {
+		p.cacheMetaByUrl(u, meta)
 	}
-	if coverUrl != "" {
-		p.cacheMetaByUrl(coverUrl, meta)
+	for _, c := range allCoverUrls {
+		p.cacheMetaByUrl(c, meta)
 	}
 }
 
@@ -330,9 +420,13 @@ func (p *KuaishouPlugin) cacheMetaByUrl(rawUrl string, meta KsMeta) {
 	cleanUrl := strings.Split(rawUrl, "?")[0]
 	p.metaCache.Store("clean:"+cleanUrl, meta)
 
-	filename := filepath.Base(cleanUrl)
+	filename := path.Base(cleanUrl)
 	if filename != "" && filename != "." && filename != "/" {
 		p.metaCache.Store("file:"+filename, meta)
+	}
+
+	if u, err := url.Parse(rawUrl); err == nil && u.Path != "" && u.Path != "/" {
+		p.metaCache.Store("path:"+u.Path, meta)
 	}
 }
 
@@ -349,15 +443,22 @@ func (p *KuaishouPlugin) lookupMeta(rawUrl string, referer string) (KsMeta, bool
 		return v.(KsMeta), true
 	}
 
-	// 3. 通过文件名匹配
-	filename := filepath.Base(cleanUrl)
+	// 3. 通过 URL Path 匹配（跨 CDN 域名统一路径匹配）
+	if u, err := url.Parse(rawUrl); err == nil && u.Path != "" && u.Path != "/" {
+		if v, ok := p.metaCache.Load("path:" + u.Path); ok {
+			return v.(KsMeta), true
+		}
+	}
+
+	// 4. 通过文件名匹配
+	filename := path.Base(cleanUrl)
 	if filename != "" && filename != "." && filename != "/" {
 		if v, ok := p.metaCache.Load("file:" + filename); ok {
 			return v.(KsMeta), true
 		}
 	}
 
-	// 4. 通过 Referer 中携带的 photoId 匹配
+	// 5. 通过 Referer 中携带的 photoId 匹配
 	if referer != "" {
 		if match := ksPhotoIdRegex.FindStringSubmatch(referer); len(match) > 1 {
 			if v, ok := p.metaCache.Load("id:" + match[1]); ok {
@@ -366,11 +467,13 @@ func (p *KuaishouPlugin) lookupMeta(rawUrl string, referer string) (KsMeta, bool
 		}
 	}
 
-	// 5. 通过 URL 中的 photoId 参数匹配
+	// 6. 通过 URL 中的 photoId 参数匹配
 	if u, err := url.Parse(rawUrl); err == nil {
-		if photoId := u.Query().Get("photoId"); photoId != "" {
-			if v, ok := p.metaCache.Load("id:" + photoId); ok {
-				return v.(KsMeta), true
+		for _, qKey := range []string{"photoId", "photo_id", "id"} {
+			if photoId := u.Query().Get(qKey); photoId != "" {
+				if v, ok := p.metaCache.Load("id:" + photoId); ok {
+					return v.(KsMeta), true
+				}
 			}
 		}
 	}
@@ -430,8 +533,12 @@ func (p *KuaishouPlugin) processMediaStream(resp *http.Response, rawUrl string, 
 		}
 	}
 
+	if description == "" && p.bridge.GetTitle != nil {
+		description = p.bridge.GetTitle(resp.Request)
+	}
+
 	if description == "" {
-		description = "快手资源"
+		description = "快手视频"
 	}
 
 	id, err := gonanoid.New()

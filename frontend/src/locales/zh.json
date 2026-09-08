@@ -137,6 +137,8 @@
     "min_image_size_tip": "过滤小于此设定值的图片资源 (0为不限制，单位: KB)",
     "min_video_size": "视频大小过滤",
     "min_video_size_tip": "过滤小于此设定值的视频资源 (0为不限制，单位: KB)",
+    "show_h265": "显示 [H.265] 视频流",
+    "show_h265_tip": "是否嗅探并显示 H.265/HEVC 编码的流媒体 (关闭后将仅嗅探通用兼容的 H.264 流)",
     "port_format_error": "port 格式错误",
     "host_format_error": "host 格式错误",
     "basic_setting": "基础设置",

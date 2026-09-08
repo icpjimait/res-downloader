@@ -159,6 +159,20 @@ func (p *DefaultPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *
 				}
 			}
 		}
+
+		isH265 := false
+		if classify == "m3u8" {
+			lower := strings.ToLower(rawUrl)
+			if strings.Contains(lower, "/m3m/") || strings.Contains(lower, "h265") || strings.Contains(lower, "hevc") {
+				isH265 = true
+			}
+		}
+		if isH265 {
+			if showH265, ok := p.bridge.GetConfig("ShowH265").(bool); ok && !showH265 {
+				return resp
+			}
+		}
+
 		id, err := gonanoid.New()
 		if err != nil {
 			id = urlSign
@@ -177,10 +191,20 @@ func (p *DefaultPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *
 			DecodeKey:   "",
 			OtherData:   map[string]string{},
 			Description: func() string {
+				title := ""
 				if p.bridge.GetTitle != nil {
-					return p.bridge.GetTitle(resp.Request)
+					title = p.bridge.GetTitle(resp.Request)
 				}
-				return ""
+				if classify == "m3u8" {
+					lower := strings.ToLower(rawUrl)
+					if strings.Contains(lower, "/m3m/") || strings.Contains(lower, "h265") || strings.Contains(lower, "hevc") {
+						if title != "" {
+							return title + " [H.265]"
+						}
+						return "H.265视频流"
+					}
+				}
+				return title
 			}(),
 			ContentType: contentType,
 		}

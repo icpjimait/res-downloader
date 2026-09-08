@@ -40,6 +40,7 @@ type Config struct {
 	Rule          string              `json:"Rule"`
 	MinImageSize  int                 `json:"MinImageSize"`
 	MinVideoSize  int                 `json:"MinVideoSize"`
+	ShowH265      bool                `json:"ShowH265"`
 }
 
 var (
@@ -74,6 +75,7 @@ func initConfig() *Config {
 		Rule:          "*",
 		MinImageSize:  0,
 		MinVideoSize:  0,
+		ShowH265:      true,
 	}
 
 	rawDefaults, err := json.Marshal(defaultConfig)
@@ -241,6 +243,7 @@ func (c *Config) setConfig(config Config) {
 	c.Rule = config.Rule
 	c.MinImageSize = config.MinImageSize
 	c.MinVideoSize = config.MinVideoSize
+	c.ShowH265 = config.ShowH265
 	if oldProxy != c.UpstreamProxy || openProxy != c.OpenProxy {
 		proxyOnce.setTransport()
 	}
@@ -310,6 +313,8 @@ func (c *Config) getConfig(key string) interface{} {
 		return c.MinImageSize
 	case "MinVideoSize":
 		return c.MinVideoSize
+	case "ShowH265":
+		return c.ShowH265
 	default:
 		return nil
 	}

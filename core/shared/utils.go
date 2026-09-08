@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"golang.org/x/net/publicsuffix"
+	"net"
 	"net/url"
 	"os"
 	"os/exec"
@@ -35,10 +36,22 @@ func FormatSize(size float64) string {
 }
 
 func GetTopLevelDomain(rawURL string) string {
-	u, err := url.Parse(rawURL)
-	if err == nil && u.Host != "" {
-		rawURL = u.Host
+	rawURL = strings.TrimSpace(rawURL)
+	if strings.Contains(rawURL, "://") {
+		if u, err := url.Parse(rawURL); err == nil && u.Host != "" {
+			rawURL = u.Host
+		}
+	} else if strings.Contains(rawURL, "/") {
+		rawURL = strings.Split(rawURL, "/")[0]
 	}
+
+	if host, _, err := net.SplitHostPort(rawURL); err == nil {
+		rawURL = host
+	} else if strings.Contains(rawURL, ":") {
+		rawURL = strings.Split(rawURL, ":")[0]
+	}
+	rawURL = strings.ToLower(rawURL)
+
 	domain, err := publicsuffix.EffectiveTLDPlusOne(rawURL)
 	if err != nil {
 		return rawURL

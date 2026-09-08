@@ -104,7 +104,6 @@ func (h *HttpServer) preview(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Missing 'url' parameter", http.StatusBadRequest)
 		return
 	}
-	realURL, _ = url.QueryUnescape(realURL)
 	parsedURL, err := url.Parse(realURL)
 	if err != nil {
 		http.Error(w, "Invalid URL", http.StatusBadRequest)
@@ -135,6 +134,10 @@ func (h *HttpServer) preview(w http.ResponseWriter, r *http.Request) {
 		request.Header.Set("Referer", "https://www.xiaohongshu.com/")
 	} else if strings.Contains(host, "bilibili.com") || strings.Contains(host, "bilivideo.com") || strings.Contains(host, "bilivideo.cn") || strings.Contains(host, "hdslb.com") || strings.Contains(host, "biliapi.net") {
 		request.Header.Set("Referer", "https://www.bilibili.com/")
+	} else if pageRef := r.URL.Query().Get("referer"); pageRef != "" {
+		request.Header.Set("Referer", pageRef)
+	} else if lastURL := GetLastSeenPageURL(); lastURL != "" {
+		request.Header.Set("Referer", lastURL)
 	} else if parsedURL.Scheme != "" && parsedURL.Host != "" {
 		request.Header.Set("Referer", parsedURL.Scheme+"://"+parsedURL.Host+"/")
 	}
@@ -159,10 +162,11 @@ func (h *HttpServer) preview(w http.ResponseWriter, r *http.Request) {
 	reader := bufio.NewReader(resp.Body)
 	peekBytes, _ := reader.Peek(512)
 
-	// A. 检测是否为 M3U8 播放列表
-	isM3U8 := strings.Contains(strings.ToLower(realURL), ".m3u8") ||
+	// A. 检测是否为 M3U8 播放列表（需确保状态码正常）
+	isM3U8 := (strings.Contains(strings.ToLower(realURL), ".m3u8") ||
 		strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "mpegurl") ||
-		bytes.HasPrefix(bytes.TrimSpace(peekBytes), []byte("#EXTM3U"))
+		bytes.HasPrefix(bytes.TrimSpace(peekBytes), []byte("#EXTM3U"))) &&
+		(resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent)
 
 	if isM3U8 {
 		m3u8Data, err := io.ReadAll(reader)
@@ -181,11 +185,12 @@ func (h *HttpServer) preview(w http.ResponseWriter, r *http.Request) {
 		}
 		keyPrefix := baseHost + "/api/preview/key.key?url="
 		segPrefix := baseHost + "/api/preview/segment.ts?url="
+		mapPrefix := baseHost + "/api/preview/map.mp4?url="
 		m3u8Prefix := baseHost + "/api/preview/playlist.m3u8?url="
 
 		scanner := bufio.NewScanner(bytes.NewReader(m3u8Data))
 		var rewrittenLines []string
-		reKey := regexp.MustCompile(`URI="([^"]+)"`)
+		reURI := regexp.MustCompile(`URI="([^"]+)"`)
 
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -195,9 +200,19 @@ func (h *HttpServer) preview(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			if strings.HasPrefix(trimmed, "#EXT-X-KEY:") {
-				line = reKey.ReplaceAllStringFunc(line, func(match string) string {
-					sub := reKey.FindStringSubmatch(match)
+			if strings.HasPrefix(trimmed, "#EXT-X-MAP:") {
+				line = reURI.ReplaceAllStringFunc(line, func(match string) string {
+					sub := reURI.FindStringSubmatch(match)
+					if len(sub) >= 2 {
+						mapURL := resolveURL(parsedURL, sub[1])
+						return fmt.Sprintf(`URI="%s%s"`, mapPrefix, url.QueryEscape(mapURL))
+					}
+					return match
+				})
+				rewrittenLines = append(rewrittenLines, line)
+			} else if strings.HasPrefix(trimmed, "#EXT-X-KEY:") {
+				line = reURI.ReplaceAllStringFunc(line, func(match string) string {
+					sub := reURI.FindStringSubmatch(match)
 					if len(sub) >= 2 {
 						keyURL := resolveURL(parsedURL, sub[1])
 						return fmt.Sprintf(`URI="%s%s"`, keyPrefix, url.QueryEscape(keyURL))
@@ -206,21 +221,13 @@ func (h *HttpServer) preview(w http.ResponseWriter, r *http.Request) {
 				})
 				rewrittenLines = append(rewrittenLines, line)
 			} else if strings.HasPrefix(trimmed, "#") {
-				if reKey.MatchString(line) {
-					line = reKey.ReplaceAllStringFunc(line, func(match string) string {
-						sub := reKey.FindStringSubmatch(match)
-						if len(sub) >= 2 {
-							keyURL := resolveURL(parsedURL, sub[1])
-							return fmt.Sprintf(`URI="%s%s"`, keyPrefix, url.QueryEscape(keyURL))
-						}
-						return match
-					})
-				}
 				rewrittenLines = append(rewrittenLines, line)
 			} else {
 				segURL := resolveURL(parsedURL, trimmed)
 				if strings.Contains(strings.ToLower(segURL), ".m3u8") {
 					rewrittenLines = append(rewrittenLines, m3u8Prefix+url.QueryEscape(segURL))
+				} else if strings.Contains(strings.ToLower(segURL), ".m4s") {
+					rewrittenLines = append(rewrittenLines, mapPrefix+url.QueryEscape(segURL))
 				} else {
 					rewrittenLines = append(rewrittenLines, segPrefix+url.QueryEscape(segURL))
 				}
@@ -264,6 +271,8 @@ func (h *HttpServer) preview(w http.ResponseWriter, r *http.Request) {
 	// 确保切片和密钥的 Content-Type 能够被 HLS 播放器正确解析
 	if strings.Contains(strings.ToLower(realURL), ".ts") {
 		w.Header().Set("Content-Type", "video/mp2t")
+	} else if strings.Contains(strings.ToLower(realURL), ".m4s") || strings.Contains(strings.ToLower(r.URL.Path), "map.mp4") {
+		w.Header().Set("Content-Type", "video/mp4")
 	} else if strings.Contains(strings.ToLower(realURL), ".key") {
 		w.Header().Set("Content-Type", "application/octet-stream")
 	}

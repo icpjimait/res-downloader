@@ -34,6 +34,7 @@ export namespace appType {
         Rule: string
         MinImageSize: number
         MinVideoSize: number
+        ShowH265: boolean
     }
 
     interface MediaInfo {

@@ -194,6 +194,15 @@ func (r *Resource) download(mediaInfo shared.MediaInfo, decodeStr string) {
 
 			cmd := exec.CommandContext(ctx, ffmpegPath, "-allowed_extensions", "ALL", "-protocol_whitelist", "file,http,https,tcp,tls,crypto", "-y", "-i", previewURL, "-c", "copy", "-bsf:a", "aac_adtstoasc", mediaInfo.SavePath)
 			output, err := cmd.CombinedOutput()
+			// 若因 fMP4/H.265 已是 ASC 格式不需要 aac_adtstoasc 导致失败，自动回退纯 copy 模式
+			if err != nil && ctx.Err() == nil {
+				cmdFallback := exec.CommandContext(ctx, ffmpegPath, "-allowed_extensions", "ALL", "-protocol_whitelist", "file,http,https,tcp,tls,crypto", "-y", "-i", previewURL, "-c", "copy", mediaInfo.SavePath)
+				outputFallback, errFallback := cmdFallback.CombinedOutput()
+				if errFallback == nil {
+					err = nil
+					output = outputFallback
+				}
+			}
 			r.tasks.Delete(mediaInfo.Id)
 
 			if err != nil {

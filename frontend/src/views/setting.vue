@@ -222,6 +222,16 @@
               </NInputNumber>
             </div>
           </div>
+
+          <div class="field-row">
+            <div class="field-info">
+              <b>{{ t('setting.show_h265') }}</b>
+              <span>{{ t('setting.show_h265_tip') }}</span>
+            </div>
+            <div class="field-control">
+              <NSwitch v-model:value="formValue.ShowH265"/>
+            </div>
+          </div>
         </div>
 
         <!-- Domain Rule Card -->

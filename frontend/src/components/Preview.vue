@@ -18,6 +18,20 @@
           {{ t('index.preview') }} - <span class="text-slate-300 font-normal truncate">{{ previewRow?.Description || previewRow?.Url }}</span>
         </h4>
         <div class="flex items-center gap-3 shrink-0">
+          <!-- Copy Link -->
+          <button 
+            type="button" 
+            @click="handleCopyUrl" 
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-200 bg-slate-700/70 hover:bg-slate-700 active:bg-slate-600 border border-slate-600/70 transition-all shadow cursor-pointer outline-none"
+            :title="t('index.copy_link')"
+          >
+            <svg class="w-3.5 h-3.5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+            </svg>
+            <span>{{ t('index.copy_link') }}</span>
+          </button>
+
           <!-- Done / Downloaded -->
           <button 
             v-if="previewRow?.Status === 'done'"
@@ -58,7 +72,7 @@
 
           <!-- Direct Download (Default / Ready) -->
           <button 
-            v-else-if="previewRow?.Classify !== 'live' && previewRow?.Classify !== 'm3u8'"
+            v-else-if="previewRow?.Classify !== 'live'"
             type="button" 
             @click="handleDownload" 
             class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-all shadow cursor-pointer border-none outline-none"
@@ -103,6 +117,7 @@ import { getDecryptionArray } from '@/assets/js/decrypt.js'
 import type Player from "video.js/dist/types/player"
 import {useI18n} from 'vue-i18n'
 import appApi from "@/api/app"
+import {ClipboardSetText} from "../../wailsjs/runtime"
 
 const {t} = useI18n()
 const videoPlayer = ref<HTMLElement | any>(null)
@@ -136,6 +151,34 @@ const props = defineProps<{
 const emits = defineEmits(["update:showModal", "download"])
 
 const changeShow = (value: boolean) => emits("update:showModal", value)
+
+const handleCopyUrl = () => {
+  if (!props.previewRow?.Url) return
+  const urlToCopy = props.previewRow.Url
+  if (typeof ClipboardSetText === 'function') {
+    ClipboardSetText(urlToCopy).then((success: boolean) => {
+      if (success) {
+        window?.$message?.success(t("common.copy_success") || "复制成功")
+      } else {
+        fallbackCopy(urlToCopy)
+      }
+    }).catch(() => {
+      fallbackCopy(urlToCopy)
+    })
+  } else {
+    fallbackCopy(urlToCopy)
+  }
+}
+
+const fallbackCopy = (text: string) => {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      window?.$message?.success(t("common.copy_success") || "复制成功")
+    }).catch(() => {
+      window?.$message?.error(t("common.copy_fail") || "复制失败")
+    })
+  }
+}
 
 const handleDownload = () => {
   emits("download", props.previewRow)
@@ -253,6 +296,19 @@ const setupVideoJsPlayer = () => {
   } else if (mediaType === "application/octet-stream" || mediaType === "video/tos" || mediaType === "binary/octet-stream" || props.previewRow.Classify === "video") {
     mediaType = "video/mp4"
   }
+
+  player.off("error")
+  player.on("error", () => {
+    if (props.previewRow?.Classify === "m3u8") {
+      const isH265 = props.previewRow?.Description?.includes("H.265") || 
+                     props.previewRow?.Url?.includes("m3m") || 
+                     props.previewRow?.Url?.includes("h265") || 
+                     props.previewRow?.Url?.includes("hevc")
+      if (isH265) {
+        window?.$message?.warning("该视频为 H.265/HEVC 高效编码，网页播放内核不支持在线预览；但已支持直接下载为 MP4，下载完成后用本地播放器即可正常播放。", { duration: 7000 })
+      }
+    }
+  })
 
   player.src({
     src: previewSrc,
