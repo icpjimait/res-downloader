@@ -195,6 +195,12 @@ func (p *DefaultPlugin) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *
 				if p.bridge.GetTitle != nil {
 					title = p.bridge.GetTitle(resp.Request)
 				}
+				if title == "" {
+					ref := strings.ToLower(resp.Request.Header.Get("Referer"))
+					if strings.Contains(ref, "kuaishou.com") || strings.Contains(ref, "gifshow.com") || strings.Contains(host, "kwai") || strings.Contains(host, "kspkg") || strings.Contains(host, "infinitedispatch") {
+						title = "快手视频"
+					}
+				}
 				if classify == "m3u8" {
 					lower := strings.ToLower(rawUrl)
 					if strings.Contains(lower, "/m3m/") || strings.Contains(lower, "h265") || strings.Contains(lower, "hevc") {

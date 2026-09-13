@@ -3,6 +3,7 @@ module res-downloader
 go 1.25.0
 
 require (
+	github.com/andybalholm/brotli v1.2.4
 	github.com/elazarl/goproxy v1.7.2
 	github.com/energye/systray v1.0.3
 	github.com/matoous/go-nanoid/v2 v2.1.0

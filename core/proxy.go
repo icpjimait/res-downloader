@@ -191,9 +191,23 @@ func (p *Proxy) setTransport() {
 }
 
 func (p *Proxy) matchPlugin(host string) shared.Plugin {
-	domain := shared.GetTopLevelDomain(host)
+	cleanHost := strings.ToLower(strings.TrimSpace(host))
+	if h, _, err := net.SplitHostPort(cleanHost); err == nil {
+		cleanHost = h
+	}
+
+	domain := shared.GetTopLevelDomain(cleanHost)
 	if plugin, ok := pluginRegistry[domain]; ok {
 		return plugin
+	}
+	if plugin, ok := pluginRegistry[cleanHost]; ok {
+		return plugin
+	}
+
+	for d, plugin := range pluginRegistry {
+		if d != "default" && (strings.HasSuffix(cleanHost, "."+d) || cleanHost == d) {
+			return plugin
+		}
 	}
 	return nil
 }
